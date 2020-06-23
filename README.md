@@ -1,2 +1,3 @@
 # read_clustering
-Cluster variant called reads in order to determine the number and quantity of modification profiles
+
+Hello! I'm Shreya! I really enjoy playing sports and baking the kitchen! 
