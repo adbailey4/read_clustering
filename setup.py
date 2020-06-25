@@ -49,5 +49,6 @@ setup(
     keywords=['variant', 'modification'],
     python_requires='>=3.5',
     install_requires=[
+        'pandas>=1.0.5',
         'numpy>=1.14.2']
 )
