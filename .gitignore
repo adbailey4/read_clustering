@@ -2,3 +2,4 @@ build
 .idea
 dist
 src/read_clustering.egg-info/
+notebooks/.ipynb_checkpoints/
