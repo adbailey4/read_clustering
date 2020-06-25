@@ -116,7 +116,8 @@ class VariantCall(object):
 
     def get_number_of_positions(self, contig, strand):
         """Return the number of variant positions on the contig strand"""
-        pass
+        new_df = self.data[(self.data['contig'] == contig) & (self.data['strand'] == strand)]
+        return len(set(new_df.reference_index))
 
     def get_position_data(self, contig, strand, position):
         """If position exists return all data covering that position otherwise return false"""

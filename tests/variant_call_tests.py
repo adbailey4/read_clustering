@@ -53,6 +53,20 @@ class VariantCallTests(unittest.TestCase):
     def test_get_number_of_strands(self):
         self.assertEqual(1, self.vc.get_number_of_strands())
 
+    def test_get_number_of_positions(self):
+        contig = "RDN18-1"
+        strand = "+"
+        self.assertEqual(37, self.vc.get_number_of_positions(contig, strand))
+        contig = "RDN18-1"
+        strand = "-"
+        self.assertEqual(0, self.vc.get_number_of_positions(contig, strand))
+        contig = "RDN25-1"
+        strand = "-"
+        self.assertEqual(0, self.vc.get_number_of_positions(contig, strand))
+        contig = "RDN25-1"
+        strand = "+"
+        self.assertEqual(48, self.vc.get_number_of_positions(contig, strand))
+
 
 if __name__ == '__main__':
     unittest.main()
