@@ -9,6 +9,7 @@
 ########################################################################
 
 import pandas as pd
+import numpy as np
 
 
 class VariantCall(object):
@@ -41,30 +42,49 @@ class VariantCall(object):
     ############################# VARIANT Set  #############################
 
     def get_variant_sets(self):
-        """Return the set of all possible sets of variants"""
-        pass
+        temp_df = self.data[['variants']]
+        temp_df = temp_df.drop_duplicates()
+        return temp_df
 
     def get_number_of_variant_sets(self):
-        """Return the number of possible sets of variants"""
-        pass
+
+        return len(self.get_variant_sets())
 
     def get_variant_set_data(self, variant_set):
-        """Return the corresponding data with specific variant set"""
-        pass
+        temp_df = self.data.loc[self.data['variants'] == variant_set]
+        temp_df = temp_df.round(6)
+
+        return temp_df
 
     def get_positions_of_variant_set(self, variant_set):
-        """Return the contig, strand and position of all locations of a variant set"""
-        pass
+        temp_df = self.data[self.data['variants'] == variant_set]
+        temp_df = temp_df[['contig', 'reference_index', 'strand', 'variants']]
+        temp_df = temp_df.drop_duplicates()
+
+        return temp_df
 
     def get_variant_sets_data(self, variant_sets):
-        """Return the corresponding data with list of variant sets"""
-        pass
+        temp_df = pd.DataFrame()
+        for variant in variant_sets:
+            found = self.data.loc[self.data['variants'] == variant]
+            temp_df = temp_df.append(found)
+
+        temp_df = temp_df.drop_duplicates()
+        temp_df = temp_df.round(6)
+
+        return temp_df
 
     def get_positions_of_variant_sets(self, variant_sets):
-        """Return the contig, strand and position of all locations of a list of variant sets"""
-        pass
+        final_df = pd.DataFrame()
+        for variant in variant_sets:
+            get_variant = self.data[self.data['variants'] == variant]
+            final_df = final_df.append(get_variant[['contig', 'reference_index', 'strand', 'variants']])
 
-    ############################# READ ID #############################
+        final_df = final_df.drop_duplicates()
+
+        return final_df
+
+        ############################# READ ID #############################
 
     def get_read_data(self, read_id):
         """Return the corresponding data with specific read_id"""
