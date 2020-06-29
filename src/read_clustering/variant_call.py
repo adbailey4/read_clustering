@@ -10,8 +10,8 @@
 
 import pandas as pd
 
-
 class VariantCall(object):
+
     """Read in variant call file and give access points to various types of data"""
 
     def __init__(self, file_path):
@@ -68,27 +68,35 @@ class VariantCall(object):
 
     def get_read_data(self, read_id):
         """Return the corresponding data with specific read_id"""
-        pass
+        df1 = self.data[self.data['read_id']== read_id]
+        return df1.iloc[:, 1:]
 
     def get_read_positions(self, read_id):
         """Return the contig, strand and position of all locations covered by read"""
-        pass
+        df1 = self.data[self.data['read_id'] == read_id]
+        return df1.loc[:, ['contig','strand','reference_index','variants']]
 
     def get_read_variant_data(self, read_id, variant):
         """Return the corresponding data with specific read_id and specific variant"""
-        pass
+        df1 = self.data[self.data['read_id'] == read_id]
+        df2 = df1[df1.variants.str.contains(variant)]
+        return df2.loc[:, ['contig','reference_index','strand','prob1','prob2','prob3','variants']]
 
     def get_read_variant_set_data(self, read_id, variant_set):
         """Return the corresponding data with specific read_id and specific variant set"""
-        pass
+        df1 = self.data[(self.data['read_id'] == read_id) & (self.data['variants'] == variant_set)]
+        return df1.loc[:, ['contig','reference_index','strand','prob1','prob2','prob3']]
 
     def get_read_variants_data(self, read_id, variants):
         """Return the corresponding data with specific read_id and list of variants"""
-        pass
+        df1 = self.data[self.data['read_id'] == read_id]
+        df2 = df1[df1.variants.str.contains('|'.join(variants))]
+        return df2.loc[:, ['contig', 'reference_index', 'strand', 'prob1', 'prob2', 'prob3', 'variants']]
 
     def get_read_variant_sets_data(self, read_id, variant_sets):
         """Return the corresponding data with specific read_id and list of variant sets"""
-        pass
+        df1 = self.data[(self.data['read_id'] == read_id) & (self.data['variants'].isin (variant_sets))]
+        return df1.loc[:, ['contig','reference_index','strand','prob1','prob2','prob3', 'variants']]
 
     ############################# variant data #############################
 
