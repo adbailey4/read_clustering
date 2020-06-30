@@ -9,7 +9,6 @@
 ########################################################################
 
 import pandas as pd
-import numpy as np
 
 
 class VariantCall(object):
@@ -39,8 +38,6 @@ class VariantCall(object):
         """Return the number strands in the dataset"""
         return len(self.get_strands())
 
-    ############################# VARIANT Set  #############################
-
     def get_variant_sets(self):
         """Return the set of all possible sets of variants"""
         temp_df = self.data[['variants']]
@@ -52,13 +49,19 @@ class VariantCall(object):
         return len(self.get_variant_sets())
 
     def get_variant_set_data(self, variant_set):
-        """Return the corresponding data with specific variant set"""
+        """Return the corresponding data with specific variant set
+        :param variant_set: a single variant set from the data
+        :return temp_df: a data frame containing the data from the passed variant set
+        """
         temp_df = self.data.loc[self.data['variants'] == variant_set]
 
         return temp_df
 
     def get_positions_of_variant_set(self, variant_set):
-        """Return the contig, strand and position of all locations of a variant set"""
+        """Return the contig, strand and position of all locations of a variant set
+        :param variant_set: a single variant set from the data
+        :return temp_df: a data frame containing the 'contig', 'reference_index', and 'strand' of a given variant
+        """
         temp_df = self.data[self.data['variants'] == variant_set]
         temp_df = temp_df[['contig', 'reference_index', 'strand', 'variants']]
         temp_df = temp_df.drop_duplicates()
@@ -66,25 +69,29 @@ class VariantCall(object):
         return temp_df
 
     def get_variant_sets_data(self, variant_sets):
-        """Return the corresponding data with a list of variant sets"""
-        temp_df = pd.DataFrame()
-        temp_df = self.data[self.data['variants'].isin(variant_sets)]
+        """Return the corresponding data with a list of variant sets
+        #:param variant_sets: a list of numerous variant sets from the data
+        #:return temp_df: a data frame containing the data of all the variant_sets in the list
+        """
 
+        temp_df = self.data[self.data['variants'].isin(variant_sets)]
         temp_df = temp_df.drop_duplicates()
 
         return temp_df
 
     def get_positions_of_variant_sets(self, variant_sets):
-        """Return the contig, strand and position of all locations of a list of variant sets"""
-        final_df = pd.DataFrame()
+        """Return the contig, strand and position of all locations of a list of variant sets
+        #:param variant_sets: a list of numerous variant sets from the data
+        #:return temp_df: a data frame containing the 'contig', 'reference_index', and 'strand' of all the variant_sets
+                          in the list
+        """
+
         final_df = self.data[self.data['variants'].isin(variant_sets)]
         final_df = final_df[['contig', 'reference_index', 'strand', 'variants']]
 
         final_df = final_df.drop_duplicates()
 
         return final_df
-
-        ############################# READ ID #############################
 
     def get_read_data(self, read_id):
         """Return the corresponding data with specific read_id"""
@@ -110,8 +117,6 @@ class VariantCall(object):
         """Return the corresponding data with specific read_id and list of variant sets"""
         pass
 
-    ############################# variant data #############################
-
     def get_number_of_variants(self):
         """Return the number of variants including canonical nucleotides"""
         pass
@@ -131,8 +136,6 @@ class VariantCall(object):
     def get_positions_of_variant(self, variant):
         """Return the contig, strand and position of all locations of a variant"""
         pass
-
-    ############################# position data #############################
 
     def get_number_of_positions(self, contig, strand):
         """Return the number of variant positions on the contig strand"""
@@ -168,4 +171,3 @@ class VariantCall(object):
     def get_read_positions_data(self, read_id, positions):
         """If position exists in read return data covering list of positions"""
         pass
-
