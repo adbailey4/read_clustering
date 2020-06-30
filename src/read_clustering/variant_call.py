@@ -40,34 +40,58 @@ class VariantCall(object):
 
     def get_variant_sets(self):
         """Return the set of all possible sets of variants"""
-        pass
+        temp_df = self.data[['variants']]
+        temp_df = temp_df.drop_duplicates()
+        return temp_df
 
     def get_number_of_variant_sets(self):
         """Return the number of possible sets of variants"""
-        pass
+        return len(self.get_variant_sets())
 
     def get_variant_set_data(self, variant_set):
-        """Return the corresponding data with specific variant set"""
-        pass
+        """Return the corresponding data with specific variant set
+        :param variant_set: a single variant set from the data
+        :return temp_df: a data frame containing the data from the passed variant set
+        """
+        temp_df = self.data.loc[self.data['variants'] == variant_set]
+
+        return temp_df
 
     def get_positions_of_variant_set(self, variant_set):
-        """Return the contig, strand and position of all locations of a variant set"""
-        pass
+        """Return the contig, strand and position of all locations of a variant set
+        :param variant_set: a single variant set from the data
+        :return temp_df: a data frame containing the 'contig', 'reference_index', and 'strand' of a given variant
+        """
+        temp_df = self.data[self.data['variants'] == variant_set]
+        temp_df = temp_df[['contig', 'reference_index', 'strand', 'variants']]
+        temp_df = temp_df.drop_duplicates()
+
+        return temp_df
 
     def get_variant_sets_data(self, variant_sets):
-        """Return the corresponding data with list of variant sets"""
-        pass
+        """Return the corresponding data with a list of variant sets
+        :param variant_sets: a list of numerous variant sets from the data
+        :return temp_df: a data frame containing the data of all the variant_sets in the list
+        """
+
+        temp_df = self.data[self.data['variants'].isin(variant_sets)]
+        temp_df = temp_df.drop_duplicates()
+
+        return temp_df
 
     def get_positions_of_variant_sets(self, variant_sets):
         """Return the contig, strand and position of all locations of a list of variant sets
-        variant_sets = ["Aa", "Tl"]
-
-        contig,reference_index,strand,variants
-        a,b,c, Aa
-        a2,b2,c2, Aa
-
+        :param variant_sets: a list of numerous variant sets from the data
+        :return temp_df: a data frame containing the 'contig', 'reference_index', and 'strand' of all the variant_sets
+                          in the list
         """
-        pass
+
+        final_df = self.data[self.data['variants'].isin(variant_sets)]
+        final_df = final_df[['contig', 'reference_index', 'strand', 'variants']]
+
+        final_df = final_df.drop_duplicates()
+
+        return final_df
 
     def get_read_data(self, read_id):
         """Return the corresponding data with specific read_id"""

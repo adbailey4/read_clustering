@@ -10,6 +10,8 @@
 import unittest
 import os
 from read_clustering.variant_call import VariantCall
+import pandas as pd
+from pandas.util.testing import assert_frame_equal
 
 
 class VariantCallTests(unittest.TestCase):
@@ -52,6 +54,78 @@ class VariantCallTests(unittest.TestCase):
 
     def test_get_number_of_strands(self):
         self.assertEqual(1, self.vc.get_number_of_strands())
+
+    def test_get_variant_sets(self):
+        temp_df = pd.DataFrame({'variants': ['Aa', 'Tl', 'Cb', 'Gc', 'Tg', 'Td', 'Ci', 'Gk', 'Aj', 'Tdm', 'Th',
+                                             'Ce', 'Af']})
+        assert_frame_equal(temp_df.reset_index(drop=True), (self.vc.get_variant_sets()).reset_index(drop=True), check_dtype = False)
+
+
+    def test_get_number_of_variant_sets(self):
+        self.assertEqual(13, self.vc.get_number_of_variant_sets())
+
+    def test_get_variant_set_data(self):
+        temp_df = pd.DataFrame({'read_id' : ['02636c05-538f-4647-b3ec-8e3a8c5eb10e', '01196b69-900b-4dc0-95a7-169cd79fae9b',
+                                            '03e6757b-31de-4b13-ab18-57f375404f28', '04c78365-fd9f-4391-8ddb-277620028285',
+                                            '02d4da5c-ec95-43ac-ac61-9f98ef4a4ca1'],
+                                'contig': ['RDN25-1', 'RDN25-1', 'RDN25-1',
+                                'RDN25-1', 'RDN25-1'], 'reference_index': ['2346', '2346', '2346', '2346', '2346'],
+                                'strand': ['+', '+', '+', '+', '+'],
+                                'variants' : ['Tdm', 'Tdm', 'Tdm', 'Tdm', 'Tdm'],
+                                'prob1': ['0.902366', '0.722098', '0.739977', '0.794725', '0.840949'],
+                                'prob2' : ['0.048817',
+                                '0.138951', '0.130012', '0.102638', '0.079525'],
+                                'prob3': ['0.048817',
+                                '0.138951', '0.130012', '0.102638', '0.079525']})
+        temp_df = temp_df.astype({"reference_index": int, "prob1": float, "prob2": float, "prob3": float})
+        pd.testing.assert_frame_equal(temp_df.reset_index(drop=True), (self.vc.get_variant_set_data("Tdm")).reset_index(drop=True),
+                                      check_exact=False, check_less_precise=4)
+
+
+    def test_get_positions_of_variant_set(self):
+        temp_df = pd.DataFrame(
+            {'contig': ['RDN25-1'],
+             'reference_index': ['2346'],
+             'strand': ['+'], 'variants': ['Tdm']})
+
+        temp_df = temp_df.astype({"reference_index": int})
+        assert_frame_equal(temp_df.reset_index(drop = True), (self.vc.get_positions_of_variant_set("Tdm")).reset_index(drop = True),
+                           check_dtype= False)
+
+    def test_get_variant_sets_data(self):
+        temp_df = pd.DataFrame(
+            {'read_id': ['028a34d4-2a7a-44e7-ab23-305915996ec8', '02636c05-538f-4647-b3ec-8e3a8c5eb10e',
+                         '01196b69-900b-4dc0-95a7-169cd79fae9b', '03e6757b-31de-4b13-ab18-57f375404f28',
+                         '043a9f51-5127-4a29-bdfd-5154cf3fa3a7', '031b1662-cbda-4efd-9120-257ac7b32eea',
+                         '02c6037c-d73b-414d-9090-0bfe88a1e0b0', '04ac5ad4-d0d2-4bb4-bc8b-ff3b713661dc',
+                         '02381d7b-ad58-4d21-8ee3-f77401c13814', '04c78365-fd9f-4391-8ddb-277620028285',
+                         '02d2f886-87ff-4ab4-98f1-3eeb642f00c2', '02d4da5c-ec95-43ac-ac61-9f98ef4a4ca1',],
+             'contig': ['RDN18-1', 'RDN25-1', 'RDN25-1', 'RDN25-1', 'RDN18-1', 'RDN18-1', 'RDN18-1', 'RDN18-1',
+                        'RDN18-1', 'RDN25-1', 'RDN18-1', 'RDN25-1'],
+             'reference_index': ['1574', '2346', '2346', '2346', '1574', '1574', '1574', '1574', '1574', '2346', '1574',
+                                 '2346'],
+             'strand': ['+', '+', '+', '+', '+', '+', '+', '+', '+', '+', '+', '+'],
+             'variants': ['Gk', 'Tdm', 'Tdm', 'Tdm', 'Gk', 'Gk', 'Gk', 'Gk', 'Gk', 'Tdm', 'Gk', 'Tdm'],
+             'prob1': ['0.256589', '0.902366', '0.722098', '0.739977', '0.970518', '0.947118', '0.301744', '0.496635',
+                       '0.215732', '0.794725', '1.000000', '0.840949'],
+             'prob2': ['0.743411', '0.048817', '0.138951', '0.130012', '0.029482', '0.052882', '0.698256', '0.503365',
+                       '0.784268', '0.102638', '0.000000', '0.079525'],
+             'prob3': ['NaN','0.048817', '0.138951', '0.130012', 'NaN', 'NaN', 'NaN', 'NaN', 'NaN', '0.102638',
+                       'NaN', '0.079525']})
+
+        temp_df = temp_df.astype({"reference_index": int, "prob1": float, "prob2": float, "prob3": float})
+        pd.testing.assert_frame_equal(temp_df.reset_index(drop=True), (self.vc.get_variant_sets_data(['Tdm', 'Gk'])).reset_index(drop=True),
+                           check_exact=False, check_less_precise=4)
+
+    def test_get_positions_of_variant_sets(self):
+        temp_df = pd.DataFrame(
+            {'contig': ['RDN18-1', 'RDN25-1'],
+             'reference_index': ['1574', '2346'],
+             'strand': ['+', '+'],
+             'variants': ['Gk','Tdm']})
+        temp_df = temp_df.astype({"reference_index": int})
+        assert_frame_equal(temp_df.reset_index(drop=True), (self.vc.get_positions_of_variant_sets(['Tdm', 'Gk'])).reset_index(drop=True),
+                           check_dtype=False)
 
     def test_get_number_of_positions(self):
         contig = "RDN18-1"
