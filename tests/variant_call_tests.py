@@ -67,6 +67,82 @@ class VariantCallTests(unittest.TestCase):
         strand = "+"
         self.assertEqual(48, self.vc.get_number_of_positions(contig, strand))
 
+    def test_get_position_data(self):
+        contig = "RDN18-1"
+        strand = "+"
+        position = 1
+        self.assertFalse(self.vc.get_position_data(contig, strand, position))
+        contig = "RDN18-1"
+        strand = "+"
+        position = 973
+        self.assertEqual(7, len(self.vc.get_position_data(contig, strand, position)))
+        self.assertSetEqual({position}, set(self.vc.get_position_data(contig, strand, position)["reference_index"]))
+        self.assertSetEqual({strand}, set(self.vc.get_position_data(contig, strand, position)["strand"]))
+        self.assertSetEqual({contig}, set(self.vc.get_position_data(contig, strand, position)["contig"]))
+
+    def test_get_positions_data(self):
+        contigs = ["RDN18-1"]
+        strands = ["+"]
+        positions = [1]
+        self.assertFalse(self.vc.get_positions_data(contigs, strands, positions))
+        contigs = ["RDN18-1", "RDN18-1"]
+        strands = ["+", "+"]
+        positions = [973, 1268]
+        self.assertEqual(14, len(self.vc.get_positions_data(contigs, strands, positions)))
+        self.assertSetEqual(set(positions),
+                            set(self.vc.get_positions_data(contigs, strands, positions)["reference_index"]))
+        self.assertSetEqual(set(strands),
+                            set(self.vc.get_positions_data(contigs, strands, positions)["strand"]))
+        self.assertSetEqual(set(contigs),
+                            set(self.vc.get_positions_data(contigs, strands, positions)["contig"]))
+
+    def test_get_variant_sets_from_position(self):
+        contig = "RDN18-1"
+        strand = "+"
+        position = 1
+        self.assertFalse(self.vc.get_variant_sets_from_position(contig, strand, position))
+        contig = "RDN18-1"
+        strand = "+"
+        position = 973
+        self.assertSetEqual({"Aa"}, self.vc.get_variant_sets_from_position(contig, strand, position))
+
+    def test_get_variants_from_position(self):
+        contig = "RDN18-1"
+        strand = "+"
+        position = 1
+        self.assertFalse(self.vc.get_variants_from_position(contig, strand, position))
+        contig = "RDN18-1"
+        strand = "+"
+        position = 973
+        self.assertSetEqual({"A", "a"}, self.vc.get_variants_from_position(contig, strand, position))
+
+    def test_get_read_position_data(self):
+        read_id = "043a9f51-5127-4a29-bdfd-5154cf3fa3a7"
+        position = 1
+        self.assertFalse(self.vc.get_read_position_data(read_id, position))
+        read_id = "043a9f51-5127-4a29-bdfd-5154cf3fa3a7"
+        position = 973
+        data = self.vc.get_read_position_data(read_id, position)
+        self.assertEqual(1, len(data))
+        self.assertEqual(position, data["reference_index"].iloc[0])
+        self.assertEqual(read_id, data["read_id"].iloc[0])
+
+    def test_get_read_positions_data(self):
+        read_id = "043a9f51-5127-4a29-bdfd-5154cf3fa3a7"
+        positions = [1, 0]
+        self.assertFalse(self.vc.get_read_positions_data(read_id, positions))
+        read_id = "043a9f51-5127-4a29-bdfd-5154cf3fa3a7"
+        positions = [973, 1]
+        data = self.vc.get_read_positions_data(read_id, positions)
+        self.assertEqual(1, len(data))
+        self.assertEqual(973, data["reference_index"].iloc[0])
+        self.assertEqual(read_id, data["read_id"].iloc[0])
+        positions = [973, 1268]
+        data = self.vc.get_read_positions_data(read_id, positions)
+        self.assertEqual(2, len(data))
+        self.assertSetEqual({973, 1268}, set(data["reference_index"]))
+        self.assertSetEqual({read_id}, set(data["read_id"]))
+
 
 if __name__ == '__main__':
     unittest.main()
