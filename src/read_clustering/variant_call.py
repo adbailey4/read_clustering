@@ -42,21 +42,23 @@ class VariantCall(object):
     ############################# VARIANT Set  #############################
 
     def get_variant_sets(self):
+        """Return the set of all possible sets of variants"""
         temp_df = self.data[['variants']]
         temp_df = temp_df.drop_duplicates()
         return temp_df
 
     def get_number_of_variant_sets(self):
-
+        """Return the number of possible sets of variants"""
         return len(self.get_variant_sets())
 
     def get_variant_set_data(self, variant_set):
+        """Return the corresponding data with specific variant set"""
         temp_df = self.data.loc[self.data['variants'] == variant_set]
-        temp_df = temp_df.round(6)
 
         return temp_df
 
     def get_positions_of_variant_set(self, variant_set):
+        """Return the contig, strand and position of all locations of a variant set"""
         temp_df = self.data[self.data['variants'] == variant_set]
         temp_df = temp_df[['contig', 'reference_index', 'strand', 'variants']]
         temp_df = temp_df.drop_duplicates()
@@ -64,21 +66,19 @@ class VariantCall(object):
         return temp_df
 
     def get_variant_sets_data(self, variant_sets):
+        """Return the corresponding data with a list of variant sets"""
         temp_df = pd.DataFrame()
-        for variant in variant_sets:
-            found = self.data.loc[self.data['variants'] == variant]
-            temp_df = temp_df.append(found)
+        temp_df = self.data[self.data['variants'].isin(variant_sets)]
 
         temp_df = temp_df.drop_duplicates()
-        temp_df = temp_df.round(6)
 
         return temp_df
 
     def get_positions_of_variant_sets(self, variant_sets):
+        """Return the contig, strand and position of all locations of a list of variant sets"""
         final_df = pd.DataFrame()
-        for variant in variant_sets:
-            get_variant = self.data[self.data['variants'] == variant]
-            final_df = final_df.append(get_variant[['contig', 'reference_index', 'strand', 'variants']])
+        final_df = self.data[self.data['variants'].isin(variant_sets)]
+        final_df = final_df[['contig', 'reference_index', 'strand', 'variants']]
 
         final_df = final_df.drop_duplicates()
 
