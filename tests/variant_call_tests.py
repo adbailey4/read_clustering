@@ -12,6 +12,8 @@ import os
 from read_clustering.variant_call import VariantCall
 import pandas as pd
 from pandas.util.testing import assert_frame_equal
+
+
 class VariantCallTests(unittest.TestCase):
     """Test VariantCall class methods"""
 
@@ -56,7 +58,6 @@ class VariantCallTests(unittest.TestCase):
     def test_get_variant_sets(self):
         temp_df = pd.DataFrame({'variants': ['Aa', 'Tl', 'Cb', 'Gc', 'Tg', 'Td', 'Ci', 'Gk', 'Aj', 'Tdm', 'Th',
                                              'Ce', 'Af']})
-
         assert_frame_equal(temp_df.reset_index(drop=True), (self.vc.get_variant_sets()).reset_index(drop=True), check_dtype = False)
 
 
