@@ -9,7 +9,7 @@
 ########################################################################
 
 import pandas as pd
-from itertools import zip_longest
+
 
 class VariantCall(object):
     """Read in variant call file and give access points to various types of data"""
@@ -37,8 +37,6 @@ class VariantCall(object):
     def get_number_of_strands(self):
         """Return the number strands in the dataset"""
         return len(self.get_strands())
-
-    ############################# VARIANT Set  #############################
 
     def get_variant_sets(self):
         """Return the set of all possible sets of variants"""
@@ -71,8 +69,6 @@ class VariantCall(object):
         """
         pass
 
-    ############################# READ ID #############################
-
     def get_read_data(self, read_id):
         """Return the corresponding data with specific read_id"""
         pass
@@ -97,8 +93,6 @@ class VariantCall(object):
         """Return the corresponding data with specific read_id and list of variant sets"""
         pass
 
-    ############################# variant data #############################
-
     def get_number_of_variants(self):
         """Return the number of variants including canonical nucleotides"""
         pass
@@ -118,8 +112,6 @@ class VariantCall(object):
     def get_positions_of_variant(self, variant):
         """Return the contig, strand and position of all locations of a variant"""
         pass
-
-    ############################# position data #############################
 
     def get_number_of_positions(self, contig, strand):
         """Return the number of variant positions on the contig strand
@@ -228,5 +220,3 @@ class VariantCall(object):
         if data.empty:
             return False
         return data
-
-

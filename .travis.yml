@@ -1,0 +1,18 @@
+notifications:
+  slack:
+    secure: kMi+aHDAiOYUhZbZprKm3X4rI9PcxVWCqCFbxuNtuD6A3hPNGb4Bb/RyAVrqyyk0Ey1GEYq5S6KHWUANmc7VXft6hzuF0LWyC59X/I4hUdXCF8OEOHzgauNCVxv0eWG6ZlUuqwZJKxOElNV3Bf0iw1+0B5Ujm/6nFAQmANjtkhceJ6chvicZvTYJm19FapqL2L8RprkBVpSRtCgSTBovo2v/mjpXCE5XCcrtgBAB9mP6HERbO1p364pU+Ne+k/Lmod2cE/lkVzX5npicVcfRnFfBWNjxXZL/IBXswEbPOROnfuIggV7/dOCEPa8RU21UduECncJZxPzaXj2JmmYq9SD7VpQefOnIhtYkiMR/5j8JjN+6Wxdm2C6K34CfDBJQ/CqOxFWO4Q8ZAZkU3qlpnhhde0MRfFXT5G6FJ3zX1BCtj8JEFzWBpdnpsMAs5RYRKLTgbVKa7J0VkGcXMYjyDPc3w2BpOJUPztPGMSfJ8SyQ/BRWQFB3XZQqUtragta9bnwvHXtQN0gK/2KB+sTbVWCs7xsD7fb0oHU+9gdKTp1Wa4v5QrhXMhldiycgr5q9+oFCTvHMurR69YFFHSVnr83hM8bF9RfWzX9DcPGyoYY+0nGJyRlhBu/Q3Vi0hMNcl4pzfV+rrhUVxQ6xAhFhPXo8n5IbHT2zylfPuskVfRY=
+  email: false
+
+language: python
+dist: xenial
+cache: false
+
+before_install:
+- python --version
+- uname -a
+
+install:
+- python setup.py install
+
+script:
+- python tests/variant_call_tests.py
