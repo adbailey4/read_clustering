@@ -10,8 +10,8 @@
 
 import pandas as pd
 
-
 class VariantCall(object):
+
     """Read in variant call file and give access points to various types of data"""
 
     def __init__(self, file_path):
@@ -94,28 +94,69 @@ class VariantCall(object):
         return final_df
 
     def get_read_data(self, read_id):
-        """Return the corresponding data with specific read_id"""
-        pass
+        """Return the corresponding data with specific read_id.
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :return: data frame with all the corresponding data for the given read_id
+        """
+        df1 = self.data[self.data['read_id'] == read_id]
+        return df1
 
     def get_read_positions(self, read_id):
-        """Return the contig, strand and position of all locations covered by read"""
-        pass
+        """Return the contig, strand and position of all locations covered by read
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :return: data frame with the 'contig', 'strand', 'reference_index', and 'variants' information
+        for the given read_id
+        """
+        df1 = self.data[self.data['read_id'] == read_id]
+        return df1.loc[:, ['contig','strand','reference_index','variants']]
 
     def get_read_variant_data(self, read_id, variant):
-        """Return the corresponding data with specific read_id and specific variant"""
-        pass
+        """Return the corresponding data with specific read_id and specific variant
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :param variant: a single variant possibility for one nucleotide position. Python type: str
+        :return: data frame with all the corresponding data for the given read_id and variant
+        """
+        df1 = self.get_read_data(read_id)
+        return df1[df1.variants.str.contains(variant)]
 
     def get_read_variant_set_data(self, read_id, variant_set):
-        """Return the corresponding data with specific read_id and specific variant set"""
-        pass
+        """Return the corresponding data with specific read_id and specific variant set
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :param variant_set: all variant possibilities (2 or 3) for one nucleotide position. Python type:str
+        :return: data frame with all the corresponding data for the given read_id and variant_set
+        """
+        df1 = self.get_read_data(read_id)
+        return df1[df1['variants'] == variant_set]
 
     def get_read_variants_data(self, read_id, variants):
-        """Return the corresponding data with specific read_id and list of variants"""
-        pass
+        """Return the corresponding data with specific read_id and list of variants
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :param variants: a list of single variant possibilities each for one different nucleotide position
+        :return: data frame with all the corresponding data for the given read_id and variants
+        """
+        df1 = self.get_read_data(read_id)
+        return df1[df1.variants.str.contains('|'.join(variants))]
 
     def get_read_variant_sets_data(self, read_id, variant_sets):
-        """Return the corresponding data with specific read_id and list of variant sets"""
-        pass
+        """Return the corresponding data with specific read_id and list of variant sets
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :param variant_sets:  a list of all variant possibilities for different nucleotide positions
+        :return: data frame with all the corresponding data for the given read_id and variant_sets
+        """
+        df1 = self.get_read_data(read_id)
+        return df1[df1['variants'].isin(variant_sets)]
+
+    def find_duplicates(self, read_id):
+        """"return any duplicated rows if present in data set of a given read_id
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :return: True if duplicated rows are present, False if not
+        """
+        df1 = self.get_read_data(read_id)
+        dup = df1[df1.duplicated()]
+        if dup.empty:
+            return False
+        else:
+            return True
 
     def get_number_of_variants(self):
         """Return the number of variants including canonical nucleotides"""
