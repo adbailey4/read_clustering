@@ -67,36 +67,69 @@ class VariantCall(object):
     ############################# READ ID #############################
 
     def get_read_data(self, read_id):
-        """Return the corresponding data with specific read_id"""
-        df1 = self.data[self.data['read_id']== read_id]
-        return df1.iloc[:, 1:]
+        """Return the corresponding data with specific read_id.
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :return: data frame with all the corresponding data for the given read_id
+        """
+        df1 = self.data[self.data['read_id'] == read_id]
+        return df1
 
     def get_read_positions(self, read_id):
-        """Return the contig, strand and position of all locations covered by read"""
+        """Return the contig, strand and position of all locations covered by read
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :return: data frame with the 'contig', 'strand', 'reference_index', and 'variants' information
+        for the given read_id
+        """
         df1 = self.data[self.data['read_id'] == read_id]
         return df1.loc[:, ['contig','strand','reference_index','variants']]
 
     def get_read_variant_data(self, read_id, variant):
-        """Return the corresponding data with specific read_id and specific variant"""
-        df1 = self.data[self.data['read_id'] == read_id]
-        df2 = df1[df1.variants.str.contains(variant)]
-        return df2.loc[:, ['contig','reference_index','strand','prob1','prob2','prob3','variants']]
+        """Return the corresponding data with specific read_id and specific variant
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :param variant: a single variant possibility for one nucleotide position. Python type: str
+        :return: data frame with all the corresponding data for the given read_id and variant
+        """
+        df1 = self.get_read_data(read_id)
+        return df1[df1.variants.str.contains(variant)]
 
     def get_read_variant_set_data(self, read_id, variant_set):
-        """Return the corresponding data with specific read_id and specific variant set"""
-        df1 = self.data[(self.data['read_id'] == read_id) & (self.data['variants'] == variant_set)]
-        return df1.loc[:, ['contig','reference_index','strand','prob1','prob2','prob3']]
+        """Return the corresponding data with specific read_id and specific variant set
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :param variant_set: all variant possibilities (2 or 3) for one nucleotide position. Python type:str
+        :return: data frame with all the corresponding data for the given read_id and variant_set
+        """
+        df1 = self.get_read_data(read_id)
+        return df1[df1['variants'] == variant_set]
 
     def get_read_variants_data(self, read_id, variants):
-        """Return the corresponding data with specific read_id and list of variants"""
-        df1 = self.data[self.data['read_id'] == read_id]
-        df2 = df1[df1.variants.str.contains('|'.join(variants))]
-        return df2.loc[:, ['contig', 'reference_index', 'strand', 'prob1', 'prob2', 'prob3', 'variants']]
+        """Return the corresponding data with specific read_id and list of variants
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :param variants: a list of single variant possibilities each for one different nucleotide position
+        :return: data frame with all the corresponding data for the given read_id and variants
+        """
+        df1 = self.get_read_data(read_id)
+        return df1[df1.variants.str.contains('|'.join(variants))]
 
     def get_read_variant_sets_data(self, read_id, variant_sets):
-        """Return the corresponding data with specific read_id and list of variant sets"""
-        df1 = self.data[(self.data['read_id'] == read_id) & (self.data['variants'].isin (variant_sets))]
-        return df1.loc[:, ['contig','reference_index','strand','prob1','prob2','prob3', 'variants']]
+        """Return the corresponding data with specific read_id and list of variant sets
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :param variant_sets:  a list of all variant possibilities for different nucleotide positions
+        :return: data frame with all the corresponding data for the given read_id and variant_sets
+        """
+        df1 = self.get_read_data(read_id)
+        return df1[df1['variants'].isin(variant_sets)]
+
+    def find_duplicates(self, read_id):
+        """"return any duplicated rows if present in data set of a given read_id
+        :param read_id: identification code for one continuous nucleotide reading. Python type:str
+        :return: (if duplicates are present) phrase 'duplicates present' and data frame with duplicated rows
+        """
+        df1 = self.get_read_data(read_id)
+        dup = df1[df1.duplicated()]
+        if dup.empty:
+            print('no duplicates')
+        else:
+            print('duplicates present', dup, sep='\n')
 
     ############################# variant data #############################
 
@@ -156,4 +189,3 @@ class VariantCall(object):
     def get_read_positions_data(self, read_id, positions):
         """If position exists in read return data covering list of positions"""
         pass
-
