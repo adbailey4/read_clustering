@@ -38,33 +38,60 @@ class VariantCall(object):
         """Return the number strands in the dataset"""
         return len(self.get_strands())
 
-    ############################# VARIANT Set  #############################
-
     def get_variant_sets(self):
         """Return the set of all possible sets of variants"""
-        pass
+        temp_df = self.data[['variants']]
+        temp_df = temp_df.drop_duplicates()
+        return temp_df
 
     def get_number_of_variant_sets(self):
         """Return the number of possible sets of variants"""
-        pass
+        return len(self.get_variant_sets())
 
     def get_variant_set_data(self, variant_set):
-        """Return the corresponding data with specific variant set"""
-        pass
+        """Return the corresponding data with specific variant set
+        :param variant_set: a single variant set from the data
+        :return temp_df: a data frame containing the data from the passed variant set
+        """
+        temp_df = self.data.loc[self.data['variants'] == variant_set]
+
+        return temp_df
 
     def get_positions_of_variant_set(self, variant_set):
-        """Return the contig, strand and position of all locations of a variant set"""
-        pass
+        """Return the contig, strand and position of all locations of a variant set
+        :param variant_set: a single variant set from the data
+        :return temp_df: a data frame containing the 'contig', 'reference_index', and 'strand' of a given variant
+        """
+        temp_df = self.data[self.data['variants'] == variant_set]
+        temp_df = temp_df[['contig', 'reference_index', 'strand', 'variants']]
+        temp_df = temp_df.drop_duplicates()
+
+        return temp_df
 
     def get_variant_sets_data(self, variant_sets):
-        """Return the corresponding data with list of variant sets"""
-        pass
+        """Return the corresponding data with a list of variant sets
+        :param variant_sets: a list of numerous variant sets from the data
+        :return temp_df: a data frame containing the data of all the variant_sets in the list
+        """
+
+        temp_df = self.data[self.data['variants'].isin(variant_sets)]
+        temp_df = temp_df.drop_duplicates()
+
+        return temp_df
 
     def get_positions_of_variant_sets(self, variant_sets):
-        """Return the contig, strand and position of all locations of a list of variant sets"""
-        pass
+        """Return the contig, strand and position of all locations of a list of variant sets
+        :param variant_sets: a list of numerous variant sets from the data
+        :return temp_df: a data frame containing the 'contig', 'reference_index', and 'strand' of all the variant_sets
+                          in the list
+        """
 
-    ############################# READ ID #############################
+        final_df = self.data[self.data['variants'].isin(variant_sets)]
+        final_df = final_df[['contig', 'reference_index', 'strand', 'variants']]
+
+        final_df = final_df.drop_duplicates()
+
+        return final_df
 
     def get_read_data(self, read_id):
         """Return the corresponding data with specific read_id.
@@ -131,8 +158,6 @@ class VariantCall(object):
         else:
             print('duplicates present', dup, sep='\n')
 
-    ############################# variant data #############################
-
     def get_number_of_variants(self):
         """Return the number of variants including canonical nucleotides"""
         pass
@@ -153,39 +178,110 @@ class VariantCall(object):
         """Return the contig, strand and position of all locations of a variant"""
         pass
 
-    ############################# position data #############################
-
     def get_number_of_positions(self, contig, strand):
-        """Return the number of variant positions on the contig strand"""
-        pass
+        """Return the number of variant positions on the contig strand
+        :param contig: string of contig
+        :param strand: string of strand {"+","-"}
+        :return: integer of number of positions
+
+        """
+        new_df = self.data[(self.data['contig'] == contig) & (self.data['strand'] == strand)]
+        return len(set(new_df.reference_index))
 
     def get_position_data(self, contig, strand, position):
-        """If position exists return all data covering that position otherwise return false"""
-        pass
+        """If position exists return all data covering that position otherwise return false
+        :param contig: string of contig
+        :param strand: string of strand {"+","-"}
+        :param position: integer of reference position
+        :return dataframe where contig, strand and reference_index match input parameters
+        """
+        data = self.data[(self.data['contig'] == contig) &
+                         (self.data['strand'] == strand) &
+                         (self.data['reference_index'] == position)]
+        if data.empty:
+            return False
+        else:
+            return data
 
     def get_positions_data(self, contigs, strands, positions):
         """If positions exists return all data covering those positions otherwise return false
 
         ex: get_positions_data(["a", "b"], ["+", "+"], [10, 120])
+        :param contigs: list of strings of contigs
+        :param strands: list of strings of strands {"+","-"}
+        :param positions: list of integer of reference positions
+        :return dataframe where contig, strand and reference_index match input parameters
         """
-        pass
+        assert len(contigs) == len(strands) == len(positions), "Must pass in equal number of contigs, strands, " \
+                                                               "and positions. "
 
-    def get_data_from_position(self, contig, strand, position):
-        """If position exists in read return data covering position"""
-        pass
+        return self._get_positions_data(pd.DataFrame({"contig": contigs,
+                                                      "strand": strands,
+                                                      "reference_index": positions}))
 
-    def get_variants_from_position(self, contig, strand, position):
-        """If position exists return variants"""
-        pass
+    def _get_positions_data(self, unique_df):
+        """If positions exists return all data covering those positions otherwise return false
+
+        ex: get_positions_data(pd.DataFrame({"contig": contigs, "strand": strands, "reference_index": positions}))
+        :param unique_df: DataFrame with "contig", "strand", "reference_index" columns and no duplicate rows
+        :return dataframe where contig, strand and reference_index are in the input dataframe
+        """
+        assert sum(unique_df.duplicated()) == 0, "There are duplicated rows in the passed in data frame"
+        keys = list(unique_df.columns.values)
+        i1 = unique_df.set_index(keys).index
+        i2 = self.data.set_index(keys).index
+        data = self.data[i2.isin(i1)]
+        if data.empty:
+            return False
+        else:
+            return data
 
     def get_variant_sets_from_position(self, contig, strand, position):
-        """If position exists in read return variant sets"""
-        pass
+        """If position exists in read return variant sets
+        :param contig: string of contig
+        :param strand: string of strand {"+","-"}
+        :param position: integer of reference position
+        :return: set of all variant sets or False if position does not exist
+        """
+        data = self.get_position_data(contig, strand, position)
+        if data is not False:
+            return set(data["variants"])
+        else:
+            return data
+
+    def get_variants_from_position(self, contig, strand, position):
+        """If position exists return variants
+        :param contig: string of contig
+        :param strand: string of strand {"+","-"}
+        :param position: integer of reference position
+        :return: set of all variants or False if position does not exist
+        """
+        data = self.get_variant_sets_from_position(contig, strand, position)
+        if data is not False:
+            return set("".join(data))
+        else:
+            return False
 
     def get_read_position_data(self, read_id, position):
-        """If position exists in read return data covering position"""
-        pass
+        """If position exists in read return data covering position
+        :param read_id: string read name
+        :param position: integer reference index
+        :return: dataframe with both read_id equal to read_id and reference_index equal to position
+        """
+        data = self.data[(self.data['read_id'] == read_id) & (self.data['reference_index'] == position)]
+        if data.empty:
+            return False
+        assert len(data) == 1, \
+            "Check input file. Got multiple hits for read {} and position {}.".format(read_id, position)
+        return data
 
     def get_read_positions_data(self, read_id, positions):
-        """If position exists in read return data covering list of positions"""
-        pass
+        """If position exists in read return data covering list of positions
+        :param read_id: string read name
+        :param positions: list of reference indices
+        :return: dataframe with both read_id equal to read_id and reference_index is in positions list
+        """
+        data = self.data[(self.data['read_id'] == read_id) & (self.data['reference_index'].isin(positions))]
+        if data.empty:
+            return False
+        return data
