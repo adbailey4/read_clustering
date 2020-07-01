@@ -149,14 +149,14 @@ class VariantCall(object):
     def find_duplicates(self, read_id):
         """"return any duplicated rows if present in data set of a given read_id
         :param read_id: identification code for one continuous nucleotide reading. Python type:str
-        :return: (if duplicates are present) phrase 'duplicates present' and data frame with duplicated rows
+        :return: True if duplicated rows are present, False if not
         """
         df1 = self.get_read_data(read_id)
         dup = df1[df1.duplicated()]
         if dup.empty:
-            print('no duplicates')
+            return False
         else:
-            print('duplicates present', dup, sep='\n')
+            return True
 
     def get_number_of_variants(self):
         """Return the number of variants including canonical nucleotides"""
