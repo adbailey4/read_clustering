@@ -285,3 +285,67 @@ class VariantCall(object):
         if data.empty:
             return False
         return data
+    
+    def get_reads_covering_2_positions_data(positions, variant_sets):
+        """Select for the reads that cover both of the given positions and variant_sets, and return the corresponding prob2
+        :param positions: 2 target positions (integers) given as a list
+        :param variant_sets: 2 target variant_sets given as a list
+        :return dataframe with 'read id' and the variant probabilities corresponding to the 2 positions given"""
+        
+        temp_df = data[(data['reference_index'].isin (positions)) & (data['variants'].isin (variant_sets))]
+        plot_data = temp_df.loc[:,['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
+        pos_n = len(positions)
+        var_n = len(variant_sets)
+        select = plot_data.groupby(['read_id']).nunique()     
+        a = select[(select['reference_index'] == pos_n) & (select['variants'] == var_n)]
+        a.columns = ['id_number', 'reference_index', 'variants', 'prob1', 'prob2']
+        target_ids = list(a.index.values)        
+        first_prob = []
+        sec_prob = []
+        for i in target_ids:
+            r = (plot_data.loc[plot_data['read_id'] == i]).reset_index(drop=True)    
+            first_prob.append(r.loc[0, 'prob2'])
+            sec_prob.append(r.loc[1, 'prob2'])
+        df_plot = pd.DataFrame(list(zip(target_ids, first_prob, sec_prob)))
+        x_val = ''
+        y_val = ''
+        x_val += 'P' + ' ' + str(positions[0]) + ' ' + str(variant_sets[0])
+        y_val += 'P' + ' ' + str(positions[1]) + ' ' + str(variant_sets[1])
+        df_plot.columns = ['read id', x_val, y_val]             
+    
+        return df_plot
+    
+    def get_reads_covering_positions_data(self, positions, variant_sets):
+        """Select for the reads that cover all given positions and variant_sets, and return the corresponding prob2
+        :param positions: target positions (integers) given as a list
+        :param variant_sets: target variant_sets given as a list
+        :return dataframe with 'read id' and the variant probabilities corresponding to the positions given"""
+        """return dataframe with probabilities for the modified variants in the given variant_set for the given position"""
+        
+        data = self.data[(self.data['reference_index'].isin (positions)) & (self.data['variants'].isin (variant_sets))]
+        plot_data = data.loc[:,['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
+        pos_n = len(positions)
+        var_n = len(Counter(variant_sets).values())           
+        select = plot_data.groupby(['read_id']).nunique()      
+        
+        a = select[(select['reference_index'] == pos_n) & (select['variants'] == var_n)]
+        a.columns = ['id_number', 'reference_index', 'variants', 'prob1', 'prob2']
+        target_ids = list(a.index.values)        
+        
+        d = {}
+        for pos in positions:
+            d[str(pos)] =[]      
+        for i in target_ids:
+            r = (plot_data.loc[plot_data['read_id'] == i]).set_index('reference_index')   
+            for index, row in r.iterrows():          
+                d[str(index)].append(r.at[index, 'prob2'])
+        
+        df_plot = pd.DataFrame(list(zip(target_ids)))
+        df_plot.columns = ['Read ID']
+        
+        for key in d:
+            col_val = ''
+            col_val += 'P' + ' ' + str(key)
+            df_plot[col_val] = d[key]   
+      
+        return df_plot
