@@ -341,7 +341,7 @@ class VariantCall(object):
                 d[str(index)].append(r.at[index, 'prob2'])
         
         df_plot = pd.DataFrame(list(zip(target_ids)))
-        df_plot.columns = ['Read ID']
+        df_plot.columns = ['read_id']
         
         for key in d:
             temp_key = int(key)
