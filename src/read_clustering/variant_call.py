@@ -296,9 +296,8 @@ class VariantCall(object):
         temp_df = self.data[(self.data['reference_index'].isin(positions)) & (self.data['variants'].isin(variant_sets))]
         plot_data = temp_df.loc[:, ['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
         pos_n = len(positions)
-        var_n = len(variant_sets)
         select = plot_data.groupby(['read_id']).nunique()
-        a = select[(select['reference_index'] == pos_n) & (select['variants'] == var_n)]
+        a = select[(select['reference_index'] == pos_n)]
         a.columns = ['id_number', 'reference_index', 'variants', 'prob1', 'prob2']
         target_ids = list(a.index.values)
 
