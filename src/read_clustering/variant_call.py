@@ -10,8 +10,8 @@
 
 import pandas as pd
 
-class VariantCall(object):
 
+class VariantCall(object):
     """Read in variant call file and give access points to various types of data"""
 
     def __init__(self, file_path):
@@ -108,7 +108,7 @@ class VariantCall(object):
         for the given read_id
         """
         df1 = self.data[self.data['read_id'] == read_id]
-        return df1.loc[:, ['contig','strand','reference_index','variants']]
+        return df1.loc[:, ['contig', 'strand', 'reference_index', 'variants']]
 
     def get_read_variant_data(self, read_id, variant):
         """Return the corresponding data with specific read_id and specific variant
@@ -279,9 +279,43 @@ class VariantCall(object):
         """If position exists in read return data covering list of positions
         :param read_id: string read name
         :param positions: list of reference indices
-        :return: dataframe with both read_id equal to read_id and reference_index is in positions list
+        :return dataframe with both read_id equal to read_id and reference_index is in positions list
         """
         data = self.data[(self.data['read_id'] == read_id) & (self.data['reference_index'].isin(positions))]
         if data.empty:
             return False
         return data
+
+    def get_reads_covering_positions_data(self, positions, variant_sets):
+        """Return a dataframe with the probabilities for the modified variants in the given variant_set for their given
+        position in the positions list
+        :param positions: a list of any number of positions for the modified variants
+        :param variant_sets: a list of modified variants
+        :return df_plot: data frame with the probabilities for each variant at each position with corresponding read id.
+        """
+        temp_df = self.data[(self.data['reference_index'].isin(positions)) & (self.data['variants'].isin(variant_sets))]
+        plot_data = temp_df.loc[:, ['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
+        pos_n = len(positions)
+        select = plot_data.groupby(['read_id']).nunique()
+        a = select[(select['reference_index'] == pos_n)]
+        a.columns = ['id_number', 'reference_index', 'variants', 'prob1', 'prob2']
+        target_ids = list(a.index.values)
+
+        d = {}
+        for pos in positions:
+            d[str(pos)] = []
+        for i in target_ids:
+            r = (plot_data.loc[plot_data['read_id'] == i]).set_index(
+                'reference_index')  # made the position the index to reference rows by it
+            for index, row in r.iterrows():
+                d[str(index)].append(r.at[index, 'prob2'])
+        df_plot = pd.DataFrame(list(zip(target_ids)))
+        df_plot.columns = ['read_id']
+        for key in d:
+            temp_key = int(key)
+            index_val = positions.index(temp_key)
+            col_val = ''
+            col_val += 'P' + ' ' + str(key) + ' ' + str(variant_sets[index_val])
+            df_plot[col_val] = d[key]  # created a new columnm with corresponding position name
+            # for each key append list to df. From initial slicing all lists should be the same length
+        return df_plot
