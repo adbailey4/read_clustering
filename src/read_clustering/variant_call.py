@@ -350,4 +350,4 @@ class VariantCall(object):
             col_val += 'P' + ' ' + str(key) + ' ' + str(variant_sets[index_val])
             df_plot[col_val] = d[key]  # created a new columnm with corresponding position name
             # for each key append list to df. From initial slicing all lists should be the same length
-        return (df_plot.head())
+        return df_plot.head()
