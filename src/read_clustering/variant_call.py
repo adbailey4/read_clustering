@@ -286,68 +286,88 @@ class VariantCall(object):
             return False
         return data
     
-    def get_reads_covering_2_positions_data(positions, variant_sets):
-        """Select for the reads that cover both of the given positions and variant_sets, and return the corresponding prob2
-        :param positions: 2 target positions (integers) given as a list
-        :param variant_sets: 2 target variant_sets given as a list
-        :return dataframe with 'read id' and the variant probabilities corresponding to the 2 positions given"""
-        
-        temp_df = data[(data['reference_index'].isin (positions)) & (data['variants'].isin (variant_sets))]
-        plot_data = temp_df.loc[:,['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
-        pos_n = len(positions)
-        var_n = len(variant_sets)
-        select = plot_data.groupby(['read_id']).nunique()     
-        a = select[(select['reference_index'] == pos_n) & (select['variants'] == var_n)]
-        a.columns = ['id_number', 'reference_index', 'variants', 'prob1', 'prob2']
-        target_ids = list(a.index.values)        
-        first_prob = []
-        sec_prob = []
-        for i in target_ids:
-            r = (plot_data.loc[plot_data['read_id'] == i]).reset_index(drop=True)    
-            first_prob.append(r.loc[0, 'prob2'])
-            sec_prob.append(r.loc[1, 'prob2'])
-        df_plot = pd.DataFrame(list(zip(target_ids, first_prob, sec_prob)))
-        x_val = ''
-        y_val = ''
-        x_val += 'P' + ' ' + str(positions[0]) + ' ' + str(variant_sets[0])
-        y_val += 'P' + ' ' + str(positions[1]) + ' ' + str(variant_sets[1])
-        df_plot.columns = ['read id', x_val, y_val]             
-    
-        return df_plot
-    
-    def get_reads_covering_positions_data(self, positions, variant_sets):
-        """Select for the reads that cover all given positions and variant_sets, and return the corresponding prob2
-        :param positions: target positions (integers) given as a list
-        :param variant_sets: target variant_sets given as a list
-        :return dataframe with 'read id' and the variant probabilities corresponding to the positions given"""
-        """return dataframe with probabilities for the modified variants in the given variant_set for the given position"""
-        
-        data = self.data[(self.data['reference_index'].isin (positions)) & (self.data['variants'].isin (variant_sets))]
+    def get_reads_covering_positions_data(self, positions):   
+        """Return all read_ids and their corresponding 'prob2' that cover the given list of positions 
+        :param positions: list of target reference indices
+        :return: dataframe with the 'read_id' data that covers all given positions and the variant probability data for each position
+        """
+        data = self.data[self.data['reference_index'].isin (positions)]
         plot_data = data.loc[:,['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
         pos_n = len(positions)
-        var_n = len(Counter(variant_sets).values())           
-        select = plot_data.groupby(['read_id']).nunique()      
-        
-        a = select[(select['reference_index'] == pos_n) & (select['variants'] == var_n)]
-        a.columns = ['id_number', 'reference_index', 'variants', 'prob1', 'prob2']
+        select = plot_data.groupby(['read_id']).nunique()
+        select.columns = ['id_number', 'reference_index', 'variants', 'prob1', 'prob2']
+        a = select[select['reference_index'] == pos_n]
         target_ids = list(a.index.values)        
-        
         d = {}
         for pos in positions:
-            d[str(pos)] =[]      
+            d[str(pos)] =[]     
         for i in target_ids:
-            r = (plot_data.loc[plot_data['read_id'] == i]).set_index('reference_index')   
+            r = (plot_data.loc[plot_data['read_id'] == i]).set_index('reference_index')    
             for index, row in r.iterrows():          
                 d[str(index)].append(r.at[index, 'prob2'])
         
         df_plot = pd.DataFrame(list(zip(target_ids)))
         df_plot.columns = ['read_id']
-        
         for key in d:
-            temp_key = int(key)
-            index_val = positions.index(temp_key)
             col_val = ''
-            col_val += 'P' + ' ' + str(key) + ' ' + variant_sets[index_val]
-            df_plot[col_val] = d[key]   #created a new columnm with corresponding position name
-                                         #for each key append list to df. From initial slicing all lists should be the same length
-        return (df_plot.head())
+            col_val += 'P' + ' ' + str(key)
+            df_plot[col_val] = d[key]     
+        return df_plot
+
+    def plot_tSNE_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):
+        """Plot and cluster the corresponding variant probabilities of the given positions
+        :param positions: list of target reference indices
+        :param clusters_n: number of clusters to be used by the clustering_algorithm
+        :param clustering_algorithm: name of the clustering algorithm to be used. 'KM' for K-means, 'GMM' for Gaussian Mixture Models, and 'no' if no clustering wanted.
+        :return: Plot visualized using t-SNE, where each point represents a read_id that covers all given positions
+        """
+        temp_df = self.get_reads_covering_positions_data(positions)
+        del temp_df['read_id']               
+
+        tsne = TSNE(random_state=0)
+        tsne_results = tsne.fit_transform(temp_df)
+        tsne_results=pd.DataFrame(tsne_results, columns=['tsne1', 'tsne2'])
+        if clustering_algorithm == 'GMM':
+            gmm = GaussianMixture(n_components = clusters_n).fit(temp_df)     
+            y_cluster = gmm.predict(temp_df)
+        if clustering_algorithm == 'KM':
+            kmeans = KMeans(n_clusters= clusters_n)       
+            kmeans.fit(temp_df)
+            y_cluster = kmeans.predict(temp_df)
+        if clustering_algorithm == 'no':
+            y_cluster = temp_df.values
+            
+        plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c = y_cluster, s = 30, cmap = 'rainbow')
+        plt.xlabel("t-SNE 1")
+        plt.ylabel("t-SNE 2")
+        plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
+        print('Number of reads in each cluster: ', Counter(kmeans.labels_))
+        return plt.show()
+    
+    def get_subunit_data(self, subunit):  
+        """Return positions located in the given subunit
+        :param subunit: subunit name as a string ('18S' or '25S)
+        :return: list of all 'reference_index' data located in the given subunit
+        """
+        data = self.data.loc[self.data['contig'] == 'RDN' + str(subunit[0:2]) + '-1']
+        data_2 = data.groupby(['reference_index']).nunique()
+        positions = []
+        variants = []
+        for i, row in data_2.iterrows():
+            x = positions.append(i)
+        return x
+    
+    def plot_number_reads_covering_positions(self, subunit):  
+        """Visualize number of reads that cover each position in the given subunit
+        :param subunit: subunit name as a string ('18S' or '25S)
+        :return: Plot showing the 'read coverage' for all positions along the subunit, starting from the 3' end
+        """
+        d = {}
+        data = self.data.loc[self.data['contig'] == 'RDN' + str(positions[0:2]) + '-1']
+        data_2 = data.groupby(['reference_index']).nunique()  
+        count_reads = data_2[['read_id']]
+        number = count_reads['read_id'].sum()
+        count_reads.plot(title = 'Reads for ' + positions + ' positions', legend = False)
+        print ('Number of reads that cover ' + str(positions) + ': ' + str(number))
+        plt.gca().invert_xaxis()
+        return plt.show()
