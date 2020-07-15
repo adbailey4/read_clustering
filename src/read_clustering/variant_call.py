@@ -314,12 +314,14 @@ class VariantCall(object):
             df_plot[col_val] = d[key]     
         return df_plot
 
-    def plot_tSNE_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):
+    def plot_tSNE_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):    #to plot with or without clustering
         """Plot and cluster the corresponding variant probabilities of the given positions
         :param positions: list of target reference indices
         :param clusters_n: number of clusters to be used by the clustering_algorithm
-        :param clustering_algorithm: name of the clustering algorithm to be used. 'KM' for K-means, 'GMM' for Gaussian Mixture Models, and 'no' if no clustering wanted.
-        :return: Plot visualized using t-SNE, where each point represents a read_id that covers all given positions
+        :param clustering_algorithm: name of the clustering algorithm to be used. 'KM' for K-means, 'GMM' for 
+        Gaussian Mixture Models, and 'no' if no clustering wanted.
+        :return: Plot visualized using t-SNE, where each point represents a read_id that covers all given positions. 
+        Prints number of points in each cluster
         """
         temp_df = self.get_reads_covering_positions_data(positions)
         del temp_df['read_id']               
@@ -343,6 +345,18 @@ class VariantCall(object):
         plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
         print('Number of reads in each cluster: ', Counter(kmeans.labels_))
         return plt.show()
+    
+    def kmeans_cluster_reads_covering_positions_data(self, positions, clusters_n):    #only to cluster data with K - means
+        """Cluster the corresponding variant probabilities of the given positions using kmeans
+        :param positions: list of target reference indices
+        :param clusters_n: number of clusters to be used by k-means algorithm
+        :return: fitted cluster estimator for the corresponding data to 'positions' given
+        """
+        temp_df = self.get_reads_covering_positions_data(positions)
+        del temp_df['read_id']               
+        kmeans = KMeans(n_clusters= clusters_n)       
+        kmeans.fit(temp_df)
+        return kmeans.predict(temp_df)
     
     def get_subunit_data(self, subunit):  
         """Return positions located in the given subunit
