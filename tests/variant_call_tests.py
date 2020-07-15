@@ -12,7 +12,9 @@ import unittest
 import os
 from read_clustering.variant_call import VariantCall
 import pandas as pd
-from pandas.util.testing import assert_frame_equal
+from pandas.testing import assert_frame_equal
+import matplotlib.pyplot as plt
+import tempfile
 
 
 class VariantCallTests(unittest.TestCase):
@@ -309,6 +311,13 @@ class VariantCallTests(unittest.TestCase):
         self.assertEqual(2, len(data))
         self.assertSetEqual({973, 1268}, set(data["reference_index"]))
         self.assertSetEqual({read_id}, set(data["read_id"]))
+
+    def test_plot_number_reads_covering_positions(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.png")
+            out_file, n_reads = self.vc.plot_number_reads_covering_positions("RDN18-1", fake_file)
+            self.assertEqual(out_file, fake_file)
+            self.assertEqual(3, n_reads)
 
 
 if __name__ == '__main__':

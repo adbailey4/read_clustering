@@ -8,10 +8,22 @@
 # History: 06/23/20 Created
 ########################################################################
 
+import os
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns; sns.set()
+plt.rcParams['figure.figsize'] = [12, 7]
+from collections import Counter
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
+from itertools import combinations
+
 
 class VariantCall(object):
-
     """Read in variant call file and give access points to various types of data"""
 
     def __init__(self, file_path):
@@ -108,7 +120,7 @@ class VariantCall(object):
         for the given read_id
         """
         df1 = self.data[self.data['read_id'] == read_id]
-        return df1.loc[:, ['contig','strand','reference_index','variants']]
+        return df1.loc[:, ['contig', 'strand', 'reference_index', 'variants']]
 
     def get_read_variant_data(self, read_id, variant):
         """Return the corresponding data with specific read_id and specific variant
@@ -285,73 +297,75 @@ class VariantCall(object):
         if data.empty:
             return False
         return data
-    
-    def get_reads_covering_positions_data(self, positions):   
-        """Return all read_ids and their corresponding 'prob2' that cover the given list of positions 
-        :param positions: list of target reference indices
-        :return: dataframe with the 'read_id' data that covers all given positions and the variant probability data for each position
-        """
-        data = self.data[self.data['reference_index'].isin (positions)]
-        plot_data = data.loc[:,['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
+
+    def get_subunit_data(self, subunit):  # assumes there is at least one read that covers all positions
+        data = self.data.loc[self.data['contig'] == 'RDN' + str(subunit[0:2]) + '-1']
+        data_2 = data.groupby(['reference_index']).nunique()
+        positions = []
+        variants = []
+        for i, row in data_2.iterrows():
+            x = positions.append(i)
+        return x
+
+    def get_reads_covering_positions_data(self, positions):  # don't need variants anymore
+        """return dataframe with probabilities for the modified variants in the given variant_set for the given position
+        Params: positions: target positions as a list
+            variants: target variants as a list in corresponding order to the positions list
+        Returns: df_plot: data frame with the probabilities for each variant at each position with corresponding read id.
+            """
+        data = self.data[self.data['reference_index'].isin(positions)]
+        plot_data = data.loc[:, ['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
         pos_n = len(positions)
         select = plot_data.groupby(['read_id']).nunique()
         select.columns = ['id_number', 'reference_index', 'variants', 'prob1', 'prob2']
         a = select[select['reference_index'] == pos_n]
-        target_ids = list(a.index.values)        
+        target_ids = list(a.index.values)
         d = {}
         for pos in positions:
-            d[str(pos)] =[]     
+            d[str(pos)] = []
+
         for i in target_ids:
-            r = (plot_data.loc[plot_data['read_id'] == i]).set_index('reference_index')    
-            for index, row in r.iterrows():          
+            r = (plot_data.loc[plot_data['read_id'] == i]).set_index('reference_index')
+            for index, row in r.iterrows():
                 d[str(index)].append(r.at[index, 'prob2'])
-        
+
         df_plot = pd.DataFrame(list(zip(target_ids)))
         df_plot.columns = ['read_id']
         for key in d:
             col_val = ''
             col_val += 'P' + ' ' + str(key)
-            df_plot[col_val] = d[key]     
+            df_plot[col_val] = d[key]
         return df_plot
 
-    def plot_tSNE_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):    #to plot with or without clustering
-        """Plot and cluster the corresponding variant probabilities of the given positions
-        :param positions: list of target reference indices
-        :param clusters_n: number of clusters to be used by the clustering_algorithm
-        :param clustering_algorithm: name of the clustering algorithm to be used. 'KM' for K-means, 'GMM' for 
-        Gaussian Mixture Models, and 'no' if no clustering wanted.
-        :return: Plot visualized using t-SNE, where each point represents a read_id that covers all given positions. 
-        """
+    def plot_tSNE_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):
         temp_df = self.get_reads_covering_positions_data(positions)
-        del temp_df['read_id']               
+        del temp_df['read_id']
 
         tsne = TSNE(random_state=0)
         tsne_results = tsne.fit_transform(temp_df)
-        tsne_results=pd.DataFrame(tsne_results, columns=['tsne1', 'tsne2'])
+        tsne_results = pd.DataFrame(tsne_results, columns=['tsne1', 'tsne2'])
+
         if clustering_algorithm == 'GMM':
-            gmm = GaussianMixture(n_components = clusters_n).fit(temp_df)     
+            gmm = GaussianMixture(n_components=clusters_n).fit(temp_df)
             y_cluster = gmm.predict(temp_df)
+        #             print('Number of reads in each cluster: ', Counter(gmm.labels_))
+
         if clustering_algorithm == 'KM':
-            kmeans = KMeans(n_clusters= clusters_n)       
+            kmeans = KMeans(n_clusters=clusters_n)
             kmeans.fit(temp_df)
             y_cluster = kmeans.predict(temp_df)
+            print('Number of reads in each cluster: ', Counter(kmeans.labels_))
         if clustering_algorithm == 'no':
-            y_cluster = temp_df.values  
-        plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c = y_cluster, s = 30, cmap = 'rainbow')
+            y_cluster = temp_df.values
+
+        plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c=y_cluster, s=30, cmap='rainbow')
         plt.xlabel("t-SNE 1")
         plt.ylabel("t-SNE 2")
         plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
+
         return plt.show()
-    
+
     def plot_PCA_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):
-        """Plot and cluster the corresponding variant probabilities of the given positions
-        :param positions: list of target reference indices
-        :param clusters_n: number of clusters to be used by the clustering_algorithm
-        :param clustering_algorithm: name of the clustering algorithm to be used. 'KM' for K-means, 'GMM' for 
-        Gaussian Mixture Models, and 'no' if no clustering wanted.
-        :return: Plot visualized using PCA, where each point represents a read_id that covers all given positions. 
-        Prints number of points in each cluster
-        """
         temp_df = self.get_reads_covering_positions_data(positions)
         read_id = []
         read_id = temp_df['read_id']
@@ -363,57 +377,33 @@ class VariantCall(object):
         pca.fit(scaled_data)
         x_pca = pca.transform(scaled_data)
         if clustering_algorithm == 'GMM':
-            gmm = GaussianMixture(n_components = clusters_n).fit(temp_df)    
+            gmm = GaussianMixture(n_components=clusters_n).fit(temp_df)
             y_cluster = gmm.predict(temp_df)
         if clustering_algorithm == 'KM':
-            kmeans = KMeans(n_clusters= clusters_n)       
+            kmeans = KMeans(n_clusters=clusters_n)
             kmeans.fit(temp_df)
             y_cluster = kmeans.predict(temp_df)
         if clustering_algorithm == 'no':
-                y_cluster = temp_df.values
-        plt.scatter(x_pca[:, 0],x_pca[:, 1], s=40)
-        plt.scatter(x_pca[:, 0],x_pca[:, 1], c = y_cluster, s = 40, cmap = 'rainbow')
+            y_cluster = temp_df.values
+        plt.scatter(x_pca[:, 0], x_pca[:, 1], s=40)
+        plt.scatter(x_pca[:, 0], x_pca[:, 1], c=y_cluster, s=40, cmap='rainbow')
         plt.xlabel("PCA 1")
         plt.ylabel("PCA 2")
         plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
         return plt.show()
-    
-    def kmeans_cluster_reads_covering_positions_data(self, positions, clusters_n):    #only to cluster data with K - means
-        """Cluster the corresponding variant probabilities of the given positions using kmeans
-        :param positions: list of target reference indices
-        :param clusters_n: number of clusters to be used by k-means algorithm
-        :return: fitted cluster estimator for the corresponding data to 'positions' given
-        """
-        temp_df = self.get_reads_covering_positions_data(positions)
-        del temp_df['read_id']               
-        kmeans = KMeans(n_clusters= clusters_n)       
-        kmeans.fit(temp_df)
-        return kmeans.predict(temp_df)
-    
-    def get_subunit_data(self, subunit):  
-        """Return positions located in the given subunit
-        :param subunit: subunit name as a string ('18S' or '25S)
-        :return: list of all 'reference_index' data located in the given subunit
-        """
-        data = self.data.loc[self.data['contig'] == 'RDN' + str(subunit[0:2]) + '-1']
+
+    def plot_number_reads_covering_positions(self, contig, figure_path=None, verbose=False):
+        data = self.data.loc[self.data['contig'] == contig]
         data_2 = data.groupby(['reference_index']).nunique()
-        positions = []
-        variants = []
-        for i, row in data_2.iterrows():
-            x = positions.append(i)
-        return x
-    
-    def plot_number_reads_covering_positions(self, subunit):  
-        """Visualize number of reads that cover each position in the given subunit
-        :param subunit: subunit name as a string ('18S' or '25S)
-        :return: Plot showing the 'read coverage' for all positions along the subunit, starting from the 3' end
-        """
-        d = {}
-        data = self.data.loc[self.data['contig'] == 'RDN' + str(positions[0:2]) + '-1']
-        data_2 = data.groupby(['reference_index']).nunique()  
         count_reads = data_2[['read_id']]
         number = count_reads['read_id'].sum()
-        count_reads.plot(title = 'Reads for ' + positions + ' positions', legend = False)
-        print ('Number of reads that cover ' + str(positions) + ': ' + str(number))
+        count_reads.plot(title='Reads for ' + contig + ' positions', legend=False)
+        if verbose:
+            print('Number of reads that cover ' + str(contig) + ': ' + str(number))
         plt.gca().invert_xaxis()
-        return plt.show()
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path)
+        else:
+            plt.show()
+        return figure_path, number
