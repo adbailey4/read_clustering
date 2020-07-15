@@ -321,7 +321,6 @@ class VariantCall(object):
         :param clustering_algorithm: name of the clustering algorithm to be used. 'KM' for K-means, 'GMM' for 
         Gaussian Mixture Models, and 'no' if no clustering wanted.
         :return: Plot visualized using t-SNE, where each point represents a read_id that covers all given positions. 
-        Prints number of points in each cluster
         """
         temp_df = self.get_reads_covering_positions_data(positions)
         del temp_df['read_id']               
@@ -337,13 +336,46 @@ class VariantCall(object):
             kmeans.fit(temp_df)
             y_cluster = kmeans.predict(temp_df)
         if clustering_algorithm == 'no':
-            y_cluster = temp_df.values
-            
+            y_cluster = temp_df.values  
         plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c = y_cluster, s = 30, cmap = 'rainbow')
         plt.xlabel("t-SNE 1")
         plt.ylabel("t-SNE 2")
         plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
-        print('Number of reads in each cluster: ', Counter(kmeans.labels_))
+        return plt.show()
+    
+    def plot_PCA_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):
+        """Plot and cluster the corresponding variant probabilities of the given positions
+        :param positions: list of target reference indices
+        :param clusters_n: number of clusters to be used by the clustering_algorithm
+        :param clustering_algorithm: name of the clustering algorithm to be used. 'KM' for K-means, 'GMM' for 
+        Gaussian Mixture Models, and 'no' if no clustering wanted.
+        :return: Plot visualized using PCA, where each point represents a read_id that covers all given positions. 
+        Prints number of points in each cluster
+        """
+        temp_df = self.get_reads_covering_positions_data(positions)
+        read_id = []
+        read_id = temp_df['read_id']
+        del temp_df['read_id']
+        scaler = StandardScaler()
+        scaler.fit(temp_df)
+        scaled_data = scaler.transform(temp_df.values)
+        pca = PCA(n_components=2)
+        pca.fit(scaled_data)
+        x_pca = pca.transform(scaled_data)
+        if clustering_algorithm == 'GMM':
+            gmm = GaussianMixture(n_components = clusters_n).fit(temp_df)    
+            y_cluster = gmm.predict(temp_df)
+        if clustering_algorithm == 'KM':
+            kmeans = KMeans(n_clusters= clusters_n)       
+            kmeans.fit(temp_df)
+            y_cluster = kmeans.predict(temp_df)
+        if clustering_algorithm == 'no':
+                y_cluster = temp_df.values
+        plt.scatter(x_pca[:, 0],x_pca[:, 1], s=40)
+        plt.scatter(x_pca[:, 0],x_pca[:, 1], c = y_cluster, s = 40, cmap = 'rainbow')
+        plt.xlabel("PCA 1")
+        plt.ylabel("PCA 2")
+        plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
         return plt.show()
     
     def kmeans_cluster_reads_covering_positions_data(self, positions, clusters_n):    #only to cluster data with K - means
