@@ -50,5 +50,6 @@ setup(
     python_requires='>=3.5',
     install_requires=[
         'pandas>=1.0.5',
-        'numpy>=1.14.2']
+        'numpy>=1.14.2',
+        'matplotlib>=3.2.2']
 )
