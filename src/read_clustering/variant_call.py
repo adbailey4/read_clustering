@@ -396,7 +396,8 @@ class VariantCall(object):
         data = self.data.loc[self.data['contig'] == contig]
         data_2 = data.groupby(['reference_index']).nunique()
         count_reads = data_2[['read_id']]
-        number = count_reads['read_id'].sum()
+        total_reads = data.groupby(['read_id']).nunique()
+        number = len(total_reads.index)
         count_reads.plot(title='Reads for ' + contig + ' positions', legend=False)
         if verbose:
             print('Number of reads that cover ' + str(contig) + ': ' + str(number))
@@ -407,3 +408,4 @@ class VariantCall(object):
         else:
             plt.show()
         return figure_path, number
+    
