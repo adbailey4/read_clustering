@@ -338,27 +338,52 @@ class VariantCall(object):
         return df_plot
 
     def plot_tSNE_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):
-        temp_df = self.get_reads_covering_positions_data(positions)
-        del temp_df['read_id']
+        X = self.get_reads_covering_positions_data(positions)
+        del X['read_id']
 
         tsne = TSNE(random_state=0)
-        tsne_results = tsne.fit_transform(temp_df)
+        tsne_results = tsne.fit_transform(X)
         tsne_results = pd.DataFrame(tsne_results, columns=['tsne1', 'tsne2'])
 
         if clustering_algorithm == 'GMM':
-            gmm = GaussianMixture(n_components=clusters_n).fit(temp_df)
-            y_cluster = gmm.predict(temp_df)
+            gmm = GaussianMixture(n_components=clusters_n).fit(X)
+            y_cluster = gmm.predict(X)
+            plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c=y_cluster, s=30, cmap='rainbow')
         #             print('Number of reads in each cluster: ', Counter(gmm.labels_))
-
         if clustering_algorithm == 'KM':
             kmeans = KMeans(n_clusters=clusters_n)
-            kmeans.fit(temp_df)
-            y_cluster = kmeans.predict(temp_df)
+            kmeans.fit(X)
+            y_cluster = kmeans.predict(X)
             print('Number of reads in each cluster: ', Counter(kmeans.labels_))
+            plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c=y_cluster, s=30, cmap='rainbow')
+        if clustering_algorithm == 'AP':      #doesn't need to specify clusters - fix longer code
+            afprop = AffinityPropagation(max_iter=250)
+            afprop.fit(X)
+            cluster_centers_indices = afprop.cluster_centers_indices_
+            n_clusters_ = len(cluster_centers_indices)
+            P = afprop.predict(X)
+            y_cluster = list(map(lambda x: '#3b4cc0' if x == 1 else '#b40426', P))
+            plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c=y_cluster, s=30, cmap='rainbow')          
+        if clustering_algorithm == 'HDBSCAN':
+            clusterer = hdbscan.HDBSCAN(min_cluster_size=10, gen_min_span_tree=True)
+            clusterer.fit(X)
+            palette = sns.color_palette()
+            y_cluster = [sns.desaturate(palette[col], sat)
+                              if col >= 0 else (0.5, 0.5, 0.5) for col, sat in
+                              zip(clusterer.labels_, clusterer.probabilities_)]
+            plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c=y_cluster, s=30, cmap='rainbow')
+        if clustering_algorithm == 'DBSCAN':   
+            ss = StandardScaler()
+            X = ss.fit_transform(X)
+            db = DBSCAN(eps=3, min_samples=10)
+            db.fit(X)
+            clusters = db.labels_
+            colors = ['royalblue', 'maroon', 'forestgreen', 'mediumorchid', 'tan', 'deeppink', 'olive', 'goldenrod', 'lightcyan', 'gray']
+            vectorizer = np.vectorize(lambda x: colors[x % len(colors)])
+            plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c=vectorizer(clusters), s=30)
         if clustering_algorithm == 'no':
             y_cluster = temp_df.values
 
-        plt.scatter(tsne_results['tsne1'], tsne_results['tsne2'], c=y_cluster, s=30, cmap='rainbow')
         plt.xlabel("t-SNE 1")
         plt.ylabel("t-SNE 2")
         plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
