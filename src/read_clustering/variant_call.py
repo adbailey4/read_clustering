@@ -21,6 +21,13 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
 from itertools import combinations
+from collections import defaultdict
+from sklearn.cluster import AffinityPropagation
+from sklearn.cluster import DBSCAN
+from sklearn import metrics
+from itertools import cycle
+import hdbscan
+
 
 
 class VariantCall(object):
@@ -417,16 +424,32 @@ class VariantCall(object):
         plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
         return plt.show()
 
-    def plot_number_reads_covering_positions(self, contig, figure_path=None, verbose=False):
-        data = self.data.loc[self.data['contig'] == contig]
-        data_2 = data.groupby(['reference_index']).nunique()
-        count_reads = data_2[['read_id']]
-        total_reads = data.groupby(['read_id']).nunique()
-        number = len(total_reads.index)
-        count_reads.plot(title='Reads for ' + contig + ' positions', legend=False)
+    def plot_number_reads_covering_positions(self, contig, figure_path=None, verbose=False): 
+        data = self.data.loc[self.data['contig'] == contig].set_index('reference_index')
+        data_2 = data.loc[:,'read_id']       
+        reads_dict = defaultdict(list)
+        pos = []
+        for index, value in data_2.items():
+            reads_dict[str(index)].append(value)  
+            pos.append(index)
+        positions = list(dict.fromkeys(pos))    
+        positions.reverse()
+        n = 0
+        d = {}
+        for i in positions:
+            n += 1
+            if n == 1:    
+                compare = reads_dict[str(i)]    
+                d[str(i)] = len(compare)
+            else:
+                unique_val = set(reads_dict[str(i)]).intersection(compare)   
+                compare = list(unique_val)      
+                d[str(i)] = len(compare)
+        count_reads = pd.Series(d)        
+        count_reads.plot(title = 'Reads for ' + contig , legend = False)
+        number = count_reads.min()
         if verbose:
-            print('Number of reads that cover ' + str(contig) + ': ' + str(number))
-        plt.gca().invert_xaxis()
+            print('Reads covering all positions in ' + str(contig) + ': ' + str(number))
         if figure_path is not None:
             assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
             plt.savefig(figure_path)
