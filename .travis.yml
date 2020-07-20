@@ -8,8 +8,9 @@ cache: false
 before_install:
 - python --version
 - uname -a
-- pip install hdbscan
+#- pip install hdbscan
 install:
-- python setup.py install
+#- python setup.py install
+- pip install .
 script:
 - python tests/variant_call_tests.py
