@@ -49,11 +49,11 @@ setup(
     keywords=['variant', 'modification'],
     python_requires='>=3.5',
     install_requires=[
-        'pandas>=1.0.5',
-        'numpy>=1.14.2',
         'matplotlib>=3.2.2',
         'seaborn>=0.10.1',
-        'scikit-learn>=0.23.1',
         'hdbscan>=0.8.26'],
-    setup_requires=['Cython>=0.29.21']
+    setup_requires=['Cython>=0.29.21',
+                    'scikit-learn>=0.23.1',
+                    'pandas>=1.0.5',
+                    'numpy>=1.14.2']
 )
