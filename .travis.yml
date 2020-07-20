@@ -8,6 +8,7 @@ cache: false
 before_install:
 - python --version
 - uname -a
+- pip install hdbscan
 install:
 - python setup.py install
 script:
