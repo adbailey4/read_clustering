@@ -53,5 +53,6 @@ setup(
         'numpy>=1.14.2',
         'matplotlib>=3.2.2',
         'seaborn>=0.10.1',
-        'scikit-learn>=0.23.1']
+        'scikit-learn>=0.23.1',
+        'hdbscan>=0.8.26']
 )
