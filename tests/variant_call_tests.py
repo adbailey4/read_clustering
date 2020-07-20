@@ -317,7 +317,7 @@ class VariantCallTests(unittest.TestCase):
             fake_file = os.path.join(temp_dir, "fake_file.png")
             out_file, n_reads = self.vc.plot_number_reads_covering_positions("RDN18-1", fake_file)
             self.assertEqual(out_file, fake_file)
-            self.assertEqual(1609, n_reads)
+            self.assertEqual(2, n_reads)
 
 
 if __name__ == '__main__':
