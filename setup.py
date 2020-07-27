@@ -54,6 +54,9 @@ setup(
         'matplotlib>=3.2.2',
         'seaborn>=0.10.1',
         'scikit-learn>=0.23.1',
-        'hdbscan>=0.8.26'],
+        'hdbscan>=0.8.26',
+        'yellowbrick>=1.1',
+        'shapely>=1.7.0',
+        'kneed>=0.6.0'],
     setup_requires=['Cython>=0.29.21']
 )

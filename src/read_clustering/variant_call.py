@@ -10,12 +10,19 @@
 
 import os
 import math
+from typing import Any, Union
+
 import scipy
 import hdbscan
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns; sns.set()
+import seaborn as sns;
+from numpy.core._multiarray_umath import ndarray
+from pandas import DataFrame, Series
+from pandas.core.arrays import ExtensionArray
+
+sns.set()
 from collections import Counter
 from collections import defaultdict
 from itertools import cycle
@@ -38,10 +45,10 @@ from sklearn.cluster import SpectralClustering
 from sklearn.mixture import GaussianMixture as GMM
 from sklearn.cluster import estimate_bandwidth
 from sklearn.model_selection import train_test_split
-from yellowbrick.cluster import KElbowVisualizer  # needs installation
+from yellowbrick.cluster import KElbowVisualizer
 from sklearn.metrics import silhouette_score
-import shapely.geometry as SG  # INSTALL
-from kneed import KneeLocator  # INSTALL
+import shapely.geometry as SG
+from kneed import KneeLocator
 
 
 class VariantCall(object):
@@ -323,10 +330,9 @@ class VariantCall(object):
         data = self.data.loc[self.data['contig'] == 'RDN' + str(subunit[0:2]) + '-1']
         data_2 = data.groupby(['reference_index']).nunique()
         positions = []
-        variants = []
         for i, row in data_2.iterrows():
-            r = positions.append(i)
-        return r
+            positions.append(i)
+        return positions
 
     def get_reads_covering_positions_data(self, positions, plot=False):
         data = self.data[self.data['reference_index'].isin(positions)]
