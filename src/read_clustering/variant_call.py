@@ -570,7 +570,7 @@ class VariantCall(object):
         tsne = TSNE(n_components=2, random_state=0)
         tsne_results = tsne.fit_transform(X)
         method_to_call = getattr(self, clustering_algorithm)
-        fit, predictor = method_to_call(**other_params)
+        fit, predictor = method_to_call(positions, **other_params)
         plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=predictor, s=30, cmap='rainbow')
         plt.xlabel("t-SNE 1")
         plt.ylabel("t-SNE 2")
@@ -591,7 +591,7 @@ class VariantCall(object):
         pca.fit(scaled_data)
         x_pca = pca.transform(scaled_data)
         method_to_call = getattr(self, clustering_algorithm)
-        fit, predictor = method_to_call(**other_params)
+        fit, predictor = method_to_call(positions, **other_params)
         plt.scatter(x_pca[:, 0], x_pca[:, 1], s=40)
         plt.scatter(x_pca[:, 0], x_pca[:, 1], c=predictor, s=40, cmap='rainbow')
         plt.xlabel("PCA 1")
@@ -636,3 +636,27 @@ class VariantCall(object):
         else:
             plt.show()
         return figure_path, number
+    
+    
+    #####
+import unittest
+import os
+from read_clustering.variant_call import VariantCall
+from pandas.testing import assert_frame_equal
+
+class VariantCallTests(unittest.TestCase):
+    """Test VariantCall class methods"""
+
+    @classmethod
+    def setUpClass(cls):
+        super(VariantCallTests, cls).setUpClass()
+        cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-2])
+        cls.variant_call_file = os.path.join(cls.HOME, "tests/test_files/test_variant_call.csv")
+        cls.vc = VariantCall(cls.variant_call_file)
+        
+    def test_affinity_propagation(self):
+        fit, predictor = self.vc.affinity_propagation()  #with 3 test positions (I find .fit8X)
+        
+        
+if __name__ == '__main__':
+    unittest.main()
