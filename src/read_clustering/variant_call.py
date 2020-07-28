@@ -8,46 +8,34 @@
 # History: 06/23/20 Created
 ########################################################################
 
-import os
 import math
-from typing import Any, Union
+import os
 
-import scipy
 import hdbscan
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns;
-from numpy.core._multiarray_umath import ndarray
-from pandas import DataFrame, Series
-from pandas.core.arrays import ExtensionArray
 
 sns.set()
-from collections import Counter
 from collections import defaultdict
-from itertools import cycle
 from scipy.sparse import csgraph
 from scipy.sparse.linalg import eigsh
 from scipy.spatial.distance import pdist, squareform
 from scipy.cluster import hierarchy
-from sklearn import metrics
 from sklearn.neighbors import NearestNeighbors
-from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
-from sklearn.mixture import GaussianMixture
+from sklearn.mixture import GaussianMixture as GMM
 from sklearn.cluster import AffinityPropagation
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.cluster import DBSCAN
 from sklearn.cluster import MeanShift
 from sklearn.cluster import SpectralClustering
-from sklearn.mixture import GaussianMixture as GMM
 from sklearn.cluster import estimate_bandwidth
-from sklearn.model_selection import train_test_split
 from yellowbrick.cluster import KElbowVisualizer
-from sklearn.metrics import silhouette_score
-import shapely.geometry as SG
+from sklearn import metrics
 from kneed import KneeLocator
 
 
@@ -326,8 +314,8 @@ class VariantCall(object):
             return False
         return data
 
-    def get_subunit_data(self, subunit):  # assumes there is at least one read that covers all positions
-        data = self.data.loc[self.data['contig'] == 'RDN' + str(subunit[0:2]) + '-1']
+    def get_contig_positions(self, contig):  # assumes there is at least one read that covers all positions
+        data = self.data.loc[self.data['contig'] == contig]
         data_2 = data.groupby(['reference_index']).nunique()
         positions = []
         for i, row in data_2.iterrows():
@@ -399,16 +387,16 @@ class VariantCall(object):
         plt.title('Comparison of different Clustering Models')
         return plt.show()
 
-    def spectral_clustering(self, positions, n_clusters=1, affinity=1, max_number_clusters=None, cluster_size=None,
-                            eps=None, min_samples=None, n_components=None):
+    def spectral_clustering(self, positions, n_clusters=1, affinity='x'):
+        #needs n_clusters, affinity as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         return SpectralClustering(n_clusters=n_clusters, affinity=affinity).fit(X), SpectralClustering(
             n_clusters=n_clusters, affinity=affinity).fit_predict(X)
 
     ##mean shift
 
-    def mean_shift(self, positions, n_clusters=None, affinity=None, max_number_clusters=None, cluster_size=None,
-                   eps=None, min_samples=None, n_components=None):
+    def mean_shift(self, positions):
+        #need no **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         quantile_data = X.to_numpy()
         quantile_val = np.quantile(quantile_data, 0.5)
@@ -428,8 +416,8 @@ class VariantCall(object):
         v.show()
         return KMeans(n_clusters=v.elbow_value_).fit(X)
 
-    def k_means(self, positions, n_clusters=None, affinity=None, max_number_clusters=1, cluster_size=None,
-                eps=None, min_samples=None, n_components=None):
+    def k_means(self, positions, max_number_clusters=1):
+        #needs max_number_clusters as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         model = KMeans()
         visualizer = KElbowVisualizer(model, k=(1, max_number_clusters + 1))
@@ -439,8 +427,8 @@ class VariantCall(object):
 
     ##HDBSCAN
 
-    def HDBSCAN(self, positions, n_clusters=None, affinity=None, max_number_clusters=None, cluster_size=1,
-                eps=None, min_samples=None, n_components=None):
+    def HDBSCAN(self, positions, cluster_size=1):
+        # needs cluster_size as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         return hdbscan.HDBSCAN(min_cluster_size=cluster_size, gen_min_span_tree=True).fit(X), hdbscan.HDBSCAN(
             min_cluster_size=cluster_size, gen_min_span_tree=True).fit_predict(X)
@@ -461,14 +449,14 @@ class VariantCall(object):
         print(a)
         i = np.arange(len(distances))
         knee = KneeLocator(i, distances, S=1, curve='convex', direction='increasing', interp_method='polynomial')
-        fig = plt.figure()
+        plt.figure()
         knee.plot_knee()
         plt.xlabel('Points')
         plt.ylabel('eps')
         print('Optimal eps value: ', distances[knee.knee])
 
-    def DBSCAN(self, positions, n_clusters=None, affinity=None, max_number_clusters=None, cluster_size=None,
-               eps=1, min_samples=1, n_components=None):
+    def DBSCAN(self, positions, eps=1, min_samples=1):
+        # needs eps, min_samples as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         X = StandardScaler().fit_transform(X)
         db = DBSCAN(eps=eps, min_samples=min_samples)
@@ -493,38 +481,96 @@ class VariantCall(object):
         plt.text(right, y3, 'y3')
         return plt.show()
 
-    def agglomerative_clustering(self, positions, n_clusters=1, affinity=None, max_number_clusters=None,
-                                 cluster_size=None,
-                                 eps=None, min_samples=None, n_components=None):
+    def agglomerative_clustering(self, positions, n_clusters=1):
+        # needs n_clusters as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         return AgglomerativeClustering(n_clusters=n_clusters).fit(X), AgglomerativeClustering(
             n_clusters=n_clusters).fit_predict(X)
 
     ##affinity propagation
 
-    def affinity_propagation(self, positions, n_clusters=None, affinity=None, max_number_clusters=None,
-                             cluster_size=None, eps=None, min_samples=None, n_components=None):
+    def affinity_propagation(self, positions):
+        # needs no **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         return AffinityPropagation().fit(X), AffinityPropagation().fit_predict(X)
 
     ##Gaussian mixture models
 
-    def gaussian_mixture_models_cluster(self, positions, n_clusters=None, affinity=None, max_number_clusters=None,
-                                        cluster_size=None, eps=None, min_samples=None, n_components=1):
+    def SelBest(self, arr: list, X: int) -> list:
+        dx = np.argsort(arr)[:X]
+        return arr[dx]
+
+    def silhouette_score(self, positions):
+        X = self.get_reads_covering_positions_data(positions)
+        del X['read_id']
+        n_clusters = np.arange(2, 20)
+        sils = []
+        sils_err = []
+        iterations = 20
+        for n in n_clusters:
+            tmp_sil = []
+            for _ in range(iterations):
+                gmm = GMM(n, n_init=2).fit(X)
+                labels = gmm.predict(X)
+                sil = metrics.silhouette_score(X, labels, metric='euclidean')
+                tmp_sil.append(sil)
+            val = np.mean(self.SelBest(list(tmp_sil), int(iterations / 5)))
+            err = np.std(tmp_sil)
+            sils.append(val)
+            sils_err.append(err)
+        plt.errorbar(n_clusters, sils, yerr=sils_err)
+        plt.title("Silhouette Scores", fontsize=20)
+        plt.xticks(n_clusters)
+        plt.xlabel("N. of clusters")
+        plt.ylabel("Score")
+        return plt.show()
+
+    def BIC(self, positions):
+        X = self.get_reads_covering_positions_data(positions)
+        del X['read_id']
+        n_clusters = np.arange(2, 20)
+        bics = []
+        bics_err = []
+        iterations = 20
+        for n in n_clusters:
+            tmp_bic = []
+            for _ in range(iterations):
+                gmm = GMM(n, n_init=2).fit(X)
+                tmp_bic.append(gmm.bic(X))
+            val = np.mean(self.SelBest(list(tmp_bic), int(iterations / 5)))
+            err = np.std(tmp_bic)
+            bics.append(val)
+            bics_err.append(err)
+        plt.errorbar(n_clusters, bics, yerr=bics_err, label='BIC')
+        plt.title("BIC Scores", fontsize=20)
+        plt.xticks(n_clusters)
+        plt.xlabel("N. of clusters")
+        plt.ylabel("Score")
+        plt.legend()
+        plt.show()
+
+        plt.errorbar(n_clusters, np.gradient(bics), yerr=bics_err, label='BIC')
+        plt.title("Gradient of BIC Scores", fontsize=20)
+        plt.xticks(n_clusters)
+        plt.xlabel("N. of clusters")
+        plt.ylabel("grad(BIC)")
+        plt.legend()
+
+    def gaussian_mixture_models(self, positions, n_clusters=1):
+        # needs n_clusters as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         return GaussianMixture(n_components=n_clusters).fit(X), GaussianMixture(n_components=n_clusters).fit_predict(X)
 
     ##plot
 
-    def plot_tSNE_reads_covering_positions_data(self, positions, clustering_algorithm, n_clusters=2,
-                                                affinity='nearest_neighbors', max_number_clusters=10, cluster_size=10,
-                                                eps=2, min_samples=10, n_components=4, figure_path=None):
+    def plot_tSNE_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None, **other_params):
+        #**other_args can be : n_clusters=,affinity=, max_number_clusters=, cluster_size=,eps=, min_samples=,
+        # n_components=, according to what each clustering method requires
         X = self.get_reads_covering_positions_data(positions, plot=True)
         tsne = TSNE(n_components=2, random_state=0)
         tsne_results = tsne.fit_transform(X)
         method_to_call = getattr(self, clustering_algorithm)
-        fit, predictor = method_to_call(positions, n_clusters, affinity, max_number_clusters, cluster_size, eps,
-                                        min_samples, n_components)
+        fit, predictor = method_to_call(**other_params)
         plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=predictor, s=30, cmap='rainbow')
         plt.xlabel("t-SNE 1")
         plt.ylabel("t-SNE 2")
@@ -536,8 +582,27 @@ class VariantCall(object):
             plt.show()
         return figure_path
 
-    def plot_PCA_reads_covering_positions_data(self, positions, clusters_n, clustering_algorithm):
-        pass
+    def plot_PCA_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None, **other_params):
+        X = self.get_reads_covering_positions_data(positions, plot=True)
+        scaler = StandardScaler()
+        scaler.fit(X)
+        scaled_data = scaler.transform(X.values)
+        pca = PCA(n_components=2)
+        pca.fit(scaled_data)
+        x_pca = pca.transform(scaled_data)
+        method_to_call = getattr(self, clustering_algorithm)
+        fit, predictor = method_to_call(**other_params)
+        plt.scatter(x_pca[:, 0], x_pca[:, 1], s=40)
+        plt.scatter(x_pca[:, 0], x_pca[:, 1], c=predictor, s=40, cmap='rainbow')
+        plt.xlabel("PCA 1")
+        plt.ylabel("PCA 2")
+        plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm + ' ' + 'clustering')
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path)
+        else:
+            plt.show()
+        return figure_path
 
     def plot_number_reads_covering_positions(self, contig, figure_path=None, verbose=False):
         data = self.data.loc[self.data['contig'] == contig].set_index('reference_index')
