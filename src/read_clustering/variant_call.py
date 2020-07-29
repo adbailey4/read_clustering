@@ -562,7 +562,7 @@ class VariantCall(object):
     def gaussian_mixture_models(self, positions, n_clusters=1):
         # needs n_clusters as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
-        return GaussianMixture(n_components=n_clusters).fit(X), GaussianMixture(n_components=n_clusters).fit_predict(X)
+        return GMM(n_components=n_clusters).fit(X), GMM(n_components=n_clusters).fit_predict(X)
 
     ##plot
 
