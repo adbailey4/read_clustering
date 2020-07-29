@@ -26,7 +26,8 @@ class VariantCallTests(unittest.TestCase):
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-2])
         cls.variant_call_file = os.path.join(cls.HOME, "tests/test_files/test_variant_call.csv")
         cls.vc = VariantCall(cls.variant_call_file)
-        cls.pos = cls.vc.get_contig_positions('RDN18-1')
+        cls.pos = [27,99,105,119,210,301,413,419,435,465,540,561,577,618,631,758,765,795,973,998,1006,1125,1180,1186,
+                   1190,1268,1270,1279,1289,1414,1427,1571,1574,1638,1772,1780,1781]
 
     def test_variant_call_file(self):
         self.assertTrue(os.path.exists(self.variant_call_file))
