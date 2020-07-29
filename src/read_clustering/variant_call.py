@@ -303,7 +303,7 @@ class VariantCall(object):
         """If position exists in read return data covering list of positions
         :param read_id: string read name
         :param positions: list of reference indices
-        :return: dataframe with both read_id equal to read_id and reference_index is in positions list
+        :return dataframe with both read_id equal to read_id and reference_index is in positions list
         """
         data = self.data[(self.data['read_id'] == read_id) & (self.data['reference_index'].isin(positions))]
         if data.empty:

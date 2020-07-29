@@ -385,6 +385,70 @@ class VariantCallTests(unittest.TestCase):
             fig_path = self.vc.get_dendrogram(list_18, y1=1.35, y2=1, y3=0.9, figure_path=fake_file)
             self.assertEqual(fig_path, fake_file)
 
+    def test_get_reads_covering_positions_data1(self):
+        variant_sets = ['Aa', 'Tl']
+        positions = [435, 465]
+        first_col = ''
+        sec_col = ''
+        first_col += 'P' + ' ' + str(positions[0]) + ' ' + str(variant_sets[0])
+        sec_col += 'P' + ' ' + str(positions[1]) + ' ' + str(variant_sets[1])
+
+        temp_df = pd.DataFrame(
+            {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
+                         '02d2f886-87ff-4ab4-98f1-3eeb642f00c2', '031b1662-cbda-4efd-9120-257ac7b32eea',
+                         '04ac5ad4-d0d2-4bb4-bc8b-ff3b713661dc'],
+             first_col: ['0.208556', '0.809814', '0.038271', '0.019851', '1.000000'],
+             sec_col: ['0.989057', '1.000000', '0.000000', '0.643448', '0.070223']})
+
+        temp_df = temp_df.astype({first_col: float, sec_col: float})
+        pd.testing.assert_frame_equal(temp_df.reset_index(drop=True),
+                                      (self.vc.get_reads_covering_positions_data(positions, variant_sets)).reset_index(
+                                          drop=True), check_exact=False, check_less_precise=4)
+
+    def test_get_reads_covering_positions_data2(self):
+        variant_sets = ['Aa', 'Tl', 'Gc']
+        positions = [435, 465, 561]
+        first_col = ''
+        sec_col = ''
+        third_col = ''
+        first_col += 'P' + ' ' + str(positions[0]) + ' ' + str(variant_sets[0])
+        sec_col += 'P' + ' ' + str(positions[1]) + ' ' + str(variant_sets[1])
+        third_col += 'P' + ' ' + str(positions[2]) + ' ' + str(variant_sets[2])
+
+        temp_df = pd.DataFrame(
+            {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
+                         '02d2f886-87ff-4ab4-98f1-3eeb642f00c2', '031b1662-cbda-4efd-9120-257ac7b32eea',
+                         '04ac5ad4-d0d2-4bb4-bc8b-ff3b713661dc'],
+             first_col: ['0.208556', '0.809814', '0.038271', '0.019851', '1.000000'],
+             sec_col: ['0.989057', '1.000000', '0.000000', '0.643448', '0.070223'],
+             third_col: ['0.181277', '0.000000', '0.070602', '0.818655', '0.538190']})
+
+        temp_df = temp_df.astype({first_col: float, sec_col: float, third_col: float})
+
+        pd.testing.assert_frame_equal(temp_df.reset_index(drop=True),
+                                      (self.vc.get_reads_covering_positions_data(positions, variant_sets)).reset_index(
+                                          drop=True), check_exact=False, check_less_precise=4)
+
+    def test_get_reads_covering_positions_data3(self):
+        variant_sets = ['Aa', 'Aa']
+        positions = [435, 27]
+        first_col = ''
+        sec_col = ''
+        first_col += 'P' + ' ' + str(positions[0]) + ' ' + str(variant_sets[0])
+        sec_col += 'P' + ' ' + str(positions[1]) + ' ' + str(variant_sets[1])
+
+        temp_df = pd.DataFrame(
+            {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
+                         '02d2f886-87ff-4ab4-98f1-3eeb642f00c2'],
+             first_col: ['0.208556', '0.809814', '0.038271'],
+             sec_col: ['0.0', '0.0', '0.0']})
+
+        temp_df = temp_df.astype({first_col: float, sec_col: float})
+
+        pd.testing.assert_frame_equal(temp_df.reset_index(drop=True),
+                                      (self.vc.get_reads_covering_positions_data(positions, variant_sets)).reset_index(
+                                          drop=True), check_exact=False, check_less_precise=4)
+
 
 if __name__ == '__main__':
     unittest.main()
