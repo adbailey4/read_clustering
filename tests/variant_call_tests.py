@@ -373,6 +373,13 @@ class VariantCallTests(unittest.TestCase):
             fig_path = self.vc.plot_tSNE_reads_covering_positions_data(self.pos, 'HDBSCAN', fake_file, cluster_size=2)
             self.assertEqual(fig_path, fake_file)
 
+    def test_get_dendrogram(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.png")
+            list_18 = self.vc.get_contig_positions('RDN18-1')
+            fig_path = self.vc.get_dendrogram(list_18, y1=1.35, y2=1, y3=0.9, figure_path=fake_file)
+            self.assertEqual(fig_path, fake_file)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -15,9 +15,7 @@ import hdbscan
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns;
-
-sns.set()
+import seaborn as sns
 from collections import defaultdict
 from scipy.sparse import csgraph
 from scipy.sparse.linalg import eigsh
@@ -26,17 +24,14 @@ from scipy.cluster import hierarchy
 from sklearn.neighbors import NearestNeighbors
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture as GMM
-from sklearn.cluster import AffinityPropagation
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.cluster import DBSCAN
-from sklearn.cluster import MeanShift
-from sklearn.cluster import SpectralClustering
-from sklearn.cluster import estimate_bandwidth
+from sklearn.cluster import AffinityPropagation, AgglomerativeClustering, DBSCAN, MeanShift, SpectralClustering, estimate_bandwidth, KMeans
 from yellowbrick.cluster import KElbowVisualizer
 from sklearn import metrics
 from kneed import KneeLocator
+
+sns.set()
 
 
 class VariantCall(object):
@@ -327,7 +322,7 @@ class VariantCall(object):
         plot_data = data.loc[:, ['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
         pos_n = len(positions)
         select = plot_data.groupby(['read_id']).nunique()
-        select.rename(columns={'read_id':'id_number'}, inplace = True)
+        select.rename(columns={'read_id': 'id_number'}, inplace=True)
         a = select[select['reference_index'] == pos_n]
         target_ids = list(a.index.values)
         d = {}
@@ -347,7 +342,7 @@ class VariantCall(object):
             del df_plot['read_id']
         return df_plot
 
-    ##Spectral clustering
+    # Spectral clustering
 
     def spectral_clusters(self, positions):
         X = self.get_reads_covering_positions_data(positions, plot=True)
@@ -380,7 +375,7 @@ class VariantCall(object):
         spectral_model_nn = SpectralClustering(n_clusters=n_clusters, affinity='nearest_neighbors')
         labels_nn = spectral_model_nn.fit_predict(X)
         affinity = ['rbf', 'nearest_neighbors']
-        s_scores = [silhouette_score(X, labels_rbf), silhouette_score(X, labels_nn)]
+        s_scores = [metrics.silhouette_score(X, labels_rbf), metrics.silhouette_score(X, labels_nn)]
         plt.bar(affinity, s_scores)
         plt.xlabel('Affinity')
         plt.ylabel('Silhouette Score')
@@ -388,12 +383,12 @@ class VariantCall(object):
         return plt.show()
 
     def spectral_clustering(self, positions, n_clusters=1, affinity='x'):
-        #needs n_clusters, affinity as **other_params
+        # needs n_clusters, affinity as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         return SpectralClustering(n_clusters=n_clusters, affinity=affinity).fit(X), SpectralClustering(
             n_clusters=n_clusters, affinity=affinity).fit_predict(X)
 
-    ##mean shift
+    # mean shift
 
     def mean_shift(self, positions, find_optimal=True):
         # need no **other_params
@@ -409,7 +404,7 @@ class VariantCall(object):
         print('Number of clusters found: ', len(mf.cluster_centers_))
         return mf, ms.fit_predict(X)
 
-    ##K means
+    # K means
 
     def k_means_clusters(self, positions, max_number_clusters):
         X = self.get_reads_covering_positions_data(positions, plot=True)
@@ -423,12 +418,12 @@ class VariantCall(object):
         # needs max_number_clusters as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         if find_optimal:
-            n = self.k_means_clusters
+            n = self.k_means_clusters(positions, max_number_clusters)
         else:
             n = max_number_clusters
         return KMeans(n_clusters=n).fit(X), KMeans(n_clusters=n).fit_predict(X)
 
-    ##HDBSCAN
+    # HDBSCAN
 
     def HDBSCAN(self, positions, cluster_size=1):
         # needs cluster_size as **other_params
@@ -436,7 +431,7 @@ class VariantCall(object):
         return hdbscan.HDBSCAN(min_cluster_size=cluster_size, gen_min_span_tree=True).fit(X), hdbscan.HDBSCAN(
             min_cluster_size=cluster_size, gen_min_span_tree=True).fit_predict(X)
 
-    ##DBSCAN
+    # DBSCAN
 
     def DBSCAN_eps(self, positions):
         X = self.get_reads_covering_positions_data(positions)
@@ -468,11 +463,11 @@ class VariantCall(object):
         print('Estimated number of clusters: ', n_clusters_)
         return db.fit(X), db.fit_predict(X)
 
-    ##Agglomerative clustering
+    # Agglomerative clustering
 
-    def get_dendrogram(self, positions, y1=0, y2=0, y3=0):
+    def get_dendrogram(self, positions, y1=0, y2=0, y3=0, figure_path=None):
         X = self.get_reads_covering_positions_data(positions, plot=True)
-        hierarchy.dendrogram(linkage(X, method='single'), labels=X.index)
+        hierarchy.dendrogram(hierarchy.linkage(X, method='single'), labels=list(X.index.values))
         left, right = plt.xlim()
         plt.hlines(y1, left, right, linestyles='dashed', label='y1')
         plt.hlines(y2, left, right, linestyles='dashed', label='y2')
@@ -482,7 +477,12 @@ class VariantCall(object):
         plt.text(right, y1, 'y1')
         plt.text(right, y2, 'y2')
         plt.text(right, y3, 'y3')
-        return plt.show()
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path)
+        else:
+            plt.show()
+        return figure_path
 
     def agglomerative_clustering(self, positions, n_clusters=1):
         # needs n_clusters as **other_params
@@ -490,14 +490,14 @@ class VariantCall(object):
         return AgglomerativeClustering(n_clusters=n_clusters).fit(X), AgglomerativeClustering(
             n_clusters=n_clusters).fit_predict(X)
 
-    ##affinity propagation
+    # affinity propagation
 
     def affinity_propagation(self, positions):
         # needs no **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
         return AffinityPropagation().fit(X), AffinityPropagation().fit_predict(X)
 
-    ##Gaussian mixture models
+    # Gaussian mixture models
 
     def SelBest(self, arr: list, X: int) -> list:
         dx = np.argsort(arr)[:X]
@@ -540,7 +540,7 @@ class VariantCall(object):
             for _ in range(iterations):
                 gmm = GMM(n, n_init=2).fit(X)
                 tmp_bic.append(gmm.bic(X))
-            val = np.mean(self.SelBest(list(tmp_bic), int(iterations / 5)))
+            val = np.mean(self.SelBest(np.array(tmp_bic), int(iterations / 5)))
             err = np.std(tmp_bic)
             bics.append(val)
             bics_err.append(err)
@@ -564,10 +564,11 @@ class VariantCall(object):
         X = self.get_reads_covering_positions_data(positions, plot=True)
         return GMM(n_components=n_clusters).fit(X), GMM(n_components=n_clusters).fit_predict(X)
 
-    ##plot
+    # plot
 
-    def plot_tSNE_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None, **other_params):
-        #**other_params can be : n_clusters=,affinity=, max_number_clusters=, cluster_size=,eps=, min_samples=,
+    def plot_tSNE_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None,
+                                                **other_params):
+        # **other_params can be : n_clusters=,affinity=, max_number_clusters=, cluster_size=,eps=, min_samples=,
         # n_components=, find_optimal=,  according to what each clustering method requires
         X = self.get_reads_covering_positions_data(positions, plot=True)
         tsne = TSNE(n_components=2, random_state=0)
@@ -639,6 +640,3 @@ class VariantCall(object):
         else:
             plt.show()
         return figure_path, number
-    
-    
-
