@@ -12,6 +12,9 @@ import os
 from read_clustering.variant_call import VariantCall
 import pandas as pd
 from pandas.testing import assert_frame_equal
+import matplotlib.pyplot as plt
+import tempfile
+import numpy as np
 
 
 class VariantCallTests(unittest.TestCase):
@@ -23,6 +26,9 @@ class VariantCallTests(unittest.TestCase):
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-2])
         cls.variant_call_file = os.path.join(cls.HOME, "tests/test_files/test_variant_call.csv")
         cls.vc = VariantCall(cls.variant_call_file)
+        cls.pos = [27, 99, 105, 119, 210, 301, 413, 419, 435, 465, 540, 561, 577, 618, 631, 758, 765, 795, 973, 998,
+                   1006, 1125, 1180, 1186,
+                   1190, 1268, 1270, 1279, 1289, 1414, 1427, 1571, 1574, 1638, 1772, 1780, 1781]
 
     def test_variant_call_file(self):
         self.assertTrue(os.path.exists(self.variant_call_file))
@@ -313,13 +319,78 @@ class VariantCallTests(unittest.TestCase):
         self.assertSetEqual({973, 1268}, set(data["reference_index"]))
         self.assertSetEqual({read_id}, set(data["read_id"]))
 
+    def test_plot_number_reads_covering_positions(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.png")
+            out_file, n_reads = self.vc.plot_number_reads_covering_positions("RDN18-1", fake_file)
+            self.assertEqual(out_file, fake_file)
+            self.assertEqual(2, n_reads)
+
+    def test_affinity_propagation(self):
+        predict_test = np.asarray([0, 1])
+        fit, predictor = self.vc.affinity_propagation(self.pos)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_gaussian_mixture_models(self):
+        predict_test = np.asarray([1, 0])
+        fit, predictor = self.vc.gaussian_mixture_models(self.pos, n_clusters=2)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_agglomerative_clustering(self):
+        predict_test = np.asarray([1, 0])
+        fit, predictor = self.vc.agglomerative_clustering(self.pos, n_clusters=2)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_DBSCAN(self):
+        predict_test = np.asarray([0, 1])
+        fit, predictor = self.vc.DBSCAN(self.pos, eps=0.5, min_samples=1)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_HDBSCAN(self):
+        predict_test = np.asarray([-1, -1])
+        fit, predictor = self.vc.HDBSCAN(self.pos, cluster_size=2)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_k_means(self):
+        predict_test = np.asarray([1, 0])
+        fit, predictor = self.vc.k_means(self.pos, max_number_clusters=2, find_optimal=False)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_mean_shift(self):
+        predict_test = np.asarray([0, 1])
+        fit, predictor = self.vc.mean_shift(self.pos, find_optimal=False)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_spectral_clustering(self):
+        predict_test = np.asarray([1, 0])
+        fit, predictor = self.vc.spectral_clustering(self.pos, n_clusters=2, affinity='rbf')
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_plot_tSNE_reads_covering_positions_data(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.png")
+            fig_path = self.vc.plot_tSNE_reads_covering_positions_data(self.pos, 'HDBSCAN', fake_file, cluster_size=2)
+            self.assertEqual(fig_path, fake_file)
+
+    def test_plot_PCA_reads_covering_positions_data(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.png")
+            fig_path = self.vc.plot_tSNE_reads_covering_positions_data(self.pos, 'HDBSCAN', fake_file, cluster_size=2)
+            self.assertEqual(fig_path, fake_file)
+
+    def test_get_dendrogram(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.png")
+            list_18 = self.vc.get_contig_positions('RDN18-1')
+            fig_path = self.vc.get_dendrogram(list_18, y1=1.35, y2=1, y3=0.9, figure_path=fake_file)
+            self.assertEqual(fig_path, fake_file)
+
     def test_get_reads_covering_positions_data1(self):
-        variant_sets = ['Aa', 'Tl']
         positions = [435, 465]
         first_col = ''
         sec_col = ''
-        first_col += 'P' + ' ' + str(positions[0]) + ' ' + str(variant_sets[0])
-        sec_col += 'P' + ' ' + str(positions[1]) + ' ' + str(variant_sets[1])
+        first_col += 'P' + ' ' + str(positions[0])
+        sec_col += 'P' + ' ' + str(positions[1])
 
         temp_df = pd.DataFrame(
             {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
@@ -330,18 +401,17 @@ class VariantCallTests(unittest.TestCase):
 
         temp_df = temp_df.astype({first_col: float, sec_col: float})
         pd.testing.assert_frame_equal(temp_df.reset_index(drop=True),
-                                      (self.vc.get_reads_covering_positions_data(positions, variant_sets)).reset_index(
+                                      (self.vc.get_reads_covering_positions_data(positions)).reset_index(
                                           drop=True), check_exact=False, check_less_precise=4)
 
     def test_get_reads_covering_positions_data2(self):
-        variant_sets = ['Aa', 'Tl', 'Gc']
         positions = [435, 465, 561]
         first_col = ''
         sec_col = ''
         third_col = ''
-        first_col += 'P' + ' ' + str(positions[0]) + ' ' + str(variant_sets[0])
-        sec_col += 'P' + ' ' + str(positions[1]) + ' ' + str(variant_sets[1])
-        third_col += 'P' + ' ' + str(positions[2]) + ' ' + str(variant_sets[2])
+        first_col += 'P' + ' ' + str(positions[0])
+        sec_col += 'P' + ' ' + str(positions[1])
+        third_col += 'P' + ' ' + str(positions[2])
 
         temp_df = pd.DataFrame(
             {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
@@ -354,16 +424,15 @@ class VariantCallTests(unittest.TestCase):
         temp_df = temp_df.astype({first_col: float, sec_col: float, third_col: float})
 
         pd.testing.assert_frame_equal(temp_df.reset_index(drop=True),
-                                      (self.vc.get_reads_covering_positions_data(positions, variant_sets)).reset_index(
+                                      (self.vc.get_reads_covering_positions_data(positions)).reset_index(
                                           drop=True), check_exact=False, check_less_precise=4)
 
     def test_get_reads_covering_positions_data3(self):
-        variant_sets = ['Aa', 'Aa']
         positions = [435, 27]
         first_col = ''
         sec_col = ''
-        first_col += 'P' + ' ' + str(positions[0]) + ' ' + str(variant_sets[0])
-        sec_col += 'P' + ' ' + str(positions[1]) + ' ' + str(variant_sets[1])
+        first_col += 'P' + ' ' + str(positions[0])
+        sec_col += 'P' + ' ' + str(positions[1])
 
         temp_df = pd.DataFrame(
             {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
@@ -374,7 +443,7 @@ class VariantCallTests(unittest.TestCase):
         temp_df = temp_df.astype({first_col: float, sec_col: float})
 
         pd.testing.assert_frame_equal(temp_df.reset_index(drop=True),
-                                      (self.vc.get_reads_covering_positions_data(positions, variant_sets)).reset_index(
+                                      (self.vc.get_reads_covering_positions_data(positions)).reset_index(
                                           drop=True), check_exact=False, check_less_precise=4)
 
 
