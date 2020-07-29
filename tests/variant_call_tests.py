@@ -386,7 +386,6 @@ class VariantCallTests(unittest.TestCase):
             self.assertEqual(fig_path, fake_file)
 
     def test_get_reads_covering_positions_data1(self):
-        variant_sets = ['Aa', 'Tl']
         positions = [435, 465]
         first_col = ''
         sec_col = ''
