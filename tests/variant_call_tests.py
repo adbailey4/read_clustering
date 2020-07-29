@@ -26,6 +26,7 @@ class VariantCallTests(unittest.TestCase):
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-2])
         cls.variant_call_file = os.path.join(cls.HOME, "tests/test_files/test_variant_call.csv")
         cls.vc = VariantCall(cls.variant_call_file)
+        cls.pos = cls.vc.get_contig_positions('RDN18-1')
 
     def test_variant_call_file(self):
         self.assertTrue(os.path.exists(self.variant_call_file))
@@ -318,6 +319,58 @@ class VariantCallTests(unittest.TestCase):
             out_file, n_reads = self.vc.plot_number_reads_covering_positions("RDN18-1", fake_file)
             self.assertEqual(out_file, fake_file)
             self.assertEqual(2, n_reads)
+
+    def test_affinity_propagation(self):
+        predict_test = np.asarray([0, 1])
+        fit, predictor = self.vc.affinity_propagation(self.pos)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_gaussian_mixture_models(self):
+        predict_test = np.asarray([1, 0])
+        fit, predictor = self.vc.gaussian_mixture_models(self.pos, n_clusters=2)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_agglomerative_clustering(self):
+        predict_test = np.asarray([1, 0])
+        fit, predictor = self.vc.agglomerative_clustering(self.pos, n_clusters=2)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_DBSCAN(self):
+        predict_test = np.asarray([0, 1])
+        fit, predictor = self.vc.DBSCAN(self.pos, eps=0.5, min_samples=1)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_HDBSCAN(self):
+        predict_test = np.asarray([-1, -1])
+        fit, predictor = self.vc.HDBSCAN(self.pos, cluster_size=2)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_k_means(self):
+        predict_test = np.asarray([1, 0])
+        fit, predictor = self.vc.k_means(self.pos, max_number_clusters=2, find_optimal=False)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_mean_shift(self):
+        predict_test = np.asarray([0, 1])
+        fit, predictor = self.vc.mean_shift(self.pos, find_optimal=False)
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_spectral_clustering(self):
+        predict_test = np.asarray([1, 0])
+        fit, predictor = self.vc.spectral_clustering(self.pos, n_clusters=2, affinity='rbf')
+        self.assertEqual(predict_test.all(), predictor.all())
+
+    def test_plot_tSNE_reads_covering_positions_data(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.png")
+            fig_path = self.vc.plot_tSNE_reads_covering_positions_data(self.pos, 'HDBSCAN', fake_file, cluster_size=2)
+            self.assertEqual(fig_path, fake_file)
+
+    def test_plot_PCA_reads_covering_positions_data(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.png")
+            fig_path = self.vc.plot_tSNE_reads_covering_positions_data(self.pos, 'HDBSCAN', fake_file, cluster_size=2)
+            self.assertEqual(fig_path, fake_file)
 
 
 if __name__ == '__main__':

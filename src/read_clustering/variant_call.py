@@ -395,12 +395,15 @@ class VariantCall(object):
 
     ##mean shift
 
-    def mean_shift(self, positions):
-        #need no **other_params
+    def mean_shift(self, positions, find_optimal=True):
+        # need no **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
-        quantile_data = X.to_numpy()
-        quantile_val = np.quantile(quantile_data, 0.5)
-        bandwidth = estimate_bandwidth(X, quantile=quantile_val)
+        if find_optimal:
+            quantile_data = X.to_numpy()
+            quantile_val = np.quantile(quantile_data, 0.5)
+            bandwidth = estimate_bandwidth(X, quantile=quantile_val)
+        else:
+            bandwidth = 0.5
         ms = MeanShift(bandwidth=bandwidth)
         mf = ms.fit(X)
         print('Number of clusters found: ', len(mf.cluster_centers_))
@@ -414,16 +417,16 @@ class VariantCall(object):
         visualizer = KElbowVisualizer(model, k=(1, max_number_clusters + 1))
         v = visualizer.fit(X)
         v.show()
-        return KMeans(n_clusters=v.elbow_value_).fit(X)
+        return v.elbow_value_
 
-    def k_means(self, positions, max_number_clusters=1):
-        #needs max_number_clusters as **other_params
+    def k_means(self, positions, max_number_clusters=1, find_optimal=True):
+        # needs max_number_clusters as **other_params
         X = self.get_reads_covering_positions_data(positions, plot=True)
-        model = KMeans()
-        visualizer = KElbowVisualizer(model, k=(1, max_number_clusters + 1))
-        v = visualizer.fit(X)
-        v.show()
-        return KMeans(n_clusters=v.elbow_value_).fit(X), KMeans(n_clusters=v.elbow_value_).fit_predict(X)
+        if find_optimal:
+            n = self.k_means_clusters
+        else:
+            n = max_number_clusters
+        return KMeans(n_clusters=n).fit(X), KMeans(n_clusters=n).fit_predict(X)
 
     ##HDBSCAN
 
@@ -564,8 +567,8 @@ class VariantCall(object):
     ##plot
 
     def plot_tSNE_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None, **other_params):
-        #**other_args can be : n_clusters=,affinity=, max_number_clusters=, cluster_size=,eps=, min_samples=,
-        # n_components=, according to what each clustering method requires
+        #**other_params can be : n_clusters=,affinity=, max_number_clusters=, cluster_size=,eps=, min_samples=,
+        # n_components=, find_optimal=,  according to what each clustering method requires
         X = self.get_reads_covering_positions_data(positions, plot=True)
         tsne = TSNE(n_components=2, random_state=0)
         tsne_results = tsne.fit_transform(X)
@@ -638,25 +641,4 @@ class VariantCall(object):
         return figure_path, number
     
     
-    #####
-import unittest
-import os
-from read_clustering.variant_call import VariantCall
-from pandas.testing import assert_frame_equal
 
-class VariantCallTests(unittest.TestCase):
-    """Test VariantCall class methods"""
-
-    @classmethod
-    def setUpClass(cls):
-        super(VariantCallTests, cls).setUpClass()
-        cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-2])
-        cls.variant_call_file = os.path.join(cls.HOME, "tests/test_files/test_variant_call.csv")
-        cls.vc = VariantCall(cls.variant_call_file)
-        
-    def test_affinity_propagation(self):
-        fit, predictor = self.vc.affinity_propagation()  #with 3 test positions (I find .fit8X)
-        
-        
-if __name__ == '__main__':
-    unittest.main()
