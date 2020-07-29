@@ -26,7 +26,8 @@ from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture as GMM
-from sklearn.cluster import AffinityPropagation, AgglomerativeClustering, DBSCAN, MeanShift, SpectralClustering, estimate_bandwidth, KMeans
+from sklearn.cluster import AffinityPropagation, AgglomerativeClustering, DBSCAN, MeanShift, SpectralClustering, \
+    estimate_bandwidth, KMeans
 from yellowbrick.cluster import KElbowVisualizer
 from sklearn import metrics
 from kneed import KneeLocator
