@@ -327,7 +327,7 @@ class VariantCall(object):
         plot_data = data.loc[:, ['read_id', 'reference_index', 'variants', 'prob1', 'prob2']]
         pos_n = len(positions)
         select = plot_data.groupby(['read_id']).nunique()
-        select.columns = ['read_id', 'id_number', 'reference_index', 'variants', 'prob1', 'prob2']  #CHANGED
+        select.rename(columns={'read_id':'id_number'}, inplace = True)
         a = select[select['reference_index'] == pos_n]
         target_ids = list(a.index.values)
         d = {}
