@@ -7,7 +7,6 @@
 # History: 06/23/20 Created
 ########################################################################
 
-import pandas as pd
 import unittest
 import os
 from read_clustering.variant_call import VariantCall
@@ -15,6 +14,7 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 import matplotlib.pyplot as plt
 import tempfile
+import numpy as np
 
 
 class VariantCallTests(unittest.TestCase):
