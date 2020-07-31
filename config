@@ -1,0 +1,2 @@
+Host *.amazonaws.com
+        IdentityFile ~/.ssh/shreya2.pem
