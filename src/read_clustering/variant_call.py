@@ -641,3 +641,99 @@ class VariantCall(object):
         else:
             plt.show()
         return figure_path, number
+    
+    def clusters_for_position_pdf(self, positions, pos_to_evaluate, max_number_clusters, find_optimal = False): 
+        """Plot the PDF for the reads in the clusters of each positions given 
+        :param positions: complete list of the reference_index of the subunit 
+        :param pos_to_evaluate: list of reference_index to obtain their density plots
+        :param max_number_clusters: maximum number of clusters to be considered by the "elbow method", or 
+         clusters to be found by kmeans if find_optimal = False.
+        :param find_optimal: if True runs "elbow method" automatically to find optimal number of clusters to be
+        found by kmeans
+        :return Density plot of the number of reads (y axis) and variant probability (x axis) for the clusters in 
+        each pos_to-evaluate
+        """
+        fit, predict = self.k_means(positions, max_number_clusters = max_number_clusters, find_optimal = find_optimal) 
+        indexes = {i: np.where(fit.labels_ == i)[0] for i in range(fit.n_clusters)} 
+        X = self.get_reads_covering_positions_data(positions, plot = True)
+        possible_colors = ['blue', 'red', 'green', 'orange', 'purple', 'black', 'magenta', 'cyan', 'brown', 'gray']
+        for pos in pos_to_evaluate:
+            for key, value in indexes.items(): 
+                if cluster_count:
+                    print(str(key)+' data point count: ', len(value))
+                X_new = X.iloc[value.tolist()]  
+                X_pos = X_new.loc[:, str(pos)].T   
+                grid = GridSearchCV(KernelDensity(),{'bandwidth': np.linspace(0.1, 1.0, 30)},cv=20) 
+                grid.fit(X_pos[:, None])
+                bw = grid.best_params_ 
+                kde_skl = KernelDensity(bandwidth=bw['bandwidth'])
+                kde_skl.fit(X_pos[:, None])  
+                x_grid = np.linspace(-.3, 1.3, 1000)
+                log_pdf = kde_skl.score_samples(x_grid[:, np.newaxis])    
+                plt.plot(x_grid, np.exp(log_pdf), color= possible_colors[key], alpha=0.5, lw=1.5, label = str(key))
+                
+            plt.legend(title = 'Cluster (kmeans)')
+            plt.title('Position ' + str(pos) + ' density plot')
+            plt.xlabel('Variant probability')
+            plt.ylabel('Density (reads)')
+            plt.show()
+        return
+    
+    def kmeans_clusters_for_position_KS_test(self, positions, pos_to_evaluate, max_number_clusters, find_optimal = False):
+        """Pairwise KS test comparing the clusters found by kmeans on a specific position to determine if they 
+        are significantly different  
+        :param positions: complete list of the reference_index of the subunit to be evaluated
+        :param pos_to_evaluate: reference_index whose distribution across the clusters will be compared 
+        :param max_number_clusters: maximum number of clusters to be considered by the "elbow method", or 
+         clusters to be found by kmeans if find_optimal = False.
+        :param find_optimal: if True runs "elbow method" automatically to find optimal number of clusters to be
+        found by kmeans
+        :return ks_df: dataframe with the p value resulting from the pairwise KS test between cluster pairs
+        :return min_p_val: minimum p value found in ks_df
+        """
+        fit, predict = self.k_means(positions, max_number_clusters = max_number_clusters, find_optimal = find_optimal) 
+        indexes = {i: np.where(fit.labels_ == i)[0] for i in range(fit.n_clusters)} 
+        X = self.get_reads_covering_positions_data(positions, plot = True)
+        ks_compare = []
+        d = {}
+        critical_p = 1.36/np.sqrt(len(X.index))  
+        for key, value in indexes.items(): 
+            X_new = X.iloc[value.tolist()]   
+            X_pos = X_new.loc[:, pos_to_evaluate].T  
+            grid = GridSearchCV(KernelDensity(),{'bandwidth': np.linspace(0.1, 1.0, 30)},cv=20)
+            grid.fit(X_pos[:, None])
+            bw = grid.best_params_ 
+            kde_skl = KernelDensity(bandwidth=bw['bandwidth'])
+            kde_skl.fit(X_pos[:, None])  
+            x_grid = np.linspace(-.3, 1.3, 1000)
+            ks_compare.append(kde_skl.score_samples(x_grid[:, np.newaxis]))  
+            d[str(kde_skl.score_samples(x_grid[:, np.newaxis]))] = key  
+            
+        min_p_val = (ks_df.min()).min()
+        ks_df = pd.DataFrame([], columns = list(range(0, len(d))), index = list(range(0, len(d))))
+        return ks_df, min_p_val
+    
+    def positions_modification_plot_kmeans_clusters(self, positions, max_number_clusters, find_optimal = False, 
+                                                    cluster_count = False, subunit_name = ''): 
+        fit, predict = self.k_means(positions, max_number_clusters = max_number_clusters, find_optimal = find_optimal) 
+        indexes = {i: np.where(fit.labels_ == i)[0] for i in range(fit.n_clusters)}  
+        X = self.get_reads_covering_positions_data(positions, plot = True)
+        color_df = pd.DataFrame([], index = list(range(0, len(indexes))), columns = positions)
+        str_pos = [str(x) for x in positions]
+        mod_df = pd.DataFrame([], index = list(range(0, len(indexes))), columns = str_pos)
+        for key, value in indexes.items(): 
+            if cluster_count:
+                print('Data points in cluster' + str(key) + ' : ', len(value))
+            X_cluster = X.iloc[value.tolist()]    
+            for pos in positions:     
+                X_pos = X_cluster.loc[:, str(pos)]   
+                X_modified = X_pos[X_pos > 0.95]  
+                color_df.at[[key], [pos]] = (len(X_modified)/len(X_pos))*100   
+
+        plt.figure(figsize = (18,5))
+        ax = sns.heatmap(color_df.astype(float), annot=False, vmin = 0, vmax = 100, cmap = "OrRd")
+        ax.hlines(list(range(0,len(indexes))), *ax.get_xlim(), linewidth = 5, color = 'white')
+        ax.set_title('Modification occurrence in ' + subunit_name + ' positions', fontsize = 18)
+        ax.set_xlabel("Positions (5' to 3')", fontsize = 15)
+        ax.set_ylabel('Cluster (kmeans)', fontsize = 15)
+        return plt.show()
