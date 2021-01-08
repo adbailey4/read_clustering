@@ -56,6 +56,7 @@ setup(
         'scikit-learn>=0.23.1',
         'hdbscan>=0.8.26',
         'yellowbrick>=1.1',
+        'scipy>=1.5.0',
         'shapely>=1.7.0',
         'kneed>=0.6.0'],
     setup_requires=['Cython>=0.29.21']
