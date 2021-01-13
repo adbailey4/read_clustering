@@ -11,6 +11,7 @@
 import math
 import os
 
+import umap
 import hdbscan
 import matplotlib.pyplot as plt
 import numpy as np
@@ -337,8 +338,7 @@ class VariantCall(object):
         df_plot = pd.DataFrame(list(zip(target_ids)))
         df_plot.columns = ['read_id']
         for key in d:
-            col_val = ''
-            col_val += 'P' + ' ' + str(key)
+            col_val = str(key)
             df_plot[col_val] = d[key]
         if plot:
             del df_plot['read_id']
@@ -588,6 +588,26 @@ class VariantCall(object):
             plt.show()
         return figure_path
 
+    def plot_UMAP_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None,
+                                                **other_params):
+        # **other_params can be : n_clusters=,affinity=, max_number_clusters=, cluster_size=,eps=, min_samples=,
+        # n_components=, find_optimal=,  according to what each clustering method requires
+        X = self.get_reads_covering_positions_data(positions, plot=True)
+        reducer = umap.UMAP()
+        umap_results = reducer.fit_transform(X)
+        method_to_call = getattr(self, clustering_algorithm)
+        fit, predictor = method_to_call(positions, **other_params)
+        plt.scatter(umap_results[:, 0], umap_results[:, 1], c=predictor, s=30, cmap='rainbow')
+        plt.xlabel("UMAP 1")
+        plt.ylabel("UMAP 2")
+        plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm)
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path)
+        else:
+            plt.show()
+        return figure_path
+
     def plot_PCA_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None, **other_params):
         X = self.get_reads_covering_positions_data(positions, plot=True)
         scaler = StandardScaler()
@@ -717,20 +737,20 @@ class VariantCall(object):
         return ks_df, min_p_val
 
     def positions_modification_plot_kmeans_clusters(self, positions, max_number_clusters, find_optimal=False,
-                                                    cluster_count=False, subunit_name=''):
+                                                    cluster_count=False, subunit_name='', threshold=0.5):
         fit, predict = self.k_means(positions, max_number_clusters=max_number_clusters, find_optimal=find_optimal)
         indexes = {i: np.where(fit.labels_ == i)[0] for i in range(fit.n_clusters)}
         X = self.get_reads_covering_positions_data(positions, plot=True)
         color_df = pd.DataFrame([], index=list(range(0, len(indexes))), columns=positions)
-        str_pos = [str(x) for x in positions]
-        mod_df = pd.DataFrame([], index=list(range(0, len(indexes))), columns=str_pos)
+        # str_pos = [str(x) for x in positions]
+        # mod_df = pd.DataFrame([], index=list(range(0, len(indexes))), columns=str_pos)
         for key, value in indexes.items():
             if cluster_count:
                 print('Data points in cluster' + str(key) + ' : ', len(value))
             X_cluster = X.iloc[value.tolist()]
             for pos in positions:
                 X_pos = X_cluster.loc[:, str(pos)]
-                X_modified = X_pos[X_pos > 0.95]
+                X_modified = X_pos[X_pos > threshold]
                 color_df.at[[key], [pos]] = (len(X_modified) / len(X_pos)) * 100
 
         plt.figure(figsize=(18, 5))
