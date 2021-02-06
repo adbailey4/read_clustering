@@ -7,7 +7,6 @@ from os.path import basename, dirname, join, splitext
 
 from setuptools import find_packages, setup
 
-
 def read(*names, **kwargs):
     with io.open(
             join(dirname(__file__), *names),
@@ -49,7 +48,7 @@ setup(
     keywords=['variant', 'modification'],
     python_requires='>=3.5',
     install_requires=[
-        'pandas>=1.0.5',
+        'pandas>=1.1.0',
         'numpy>=1.14.2',
         'matplotlib>=3.2.2',
         'seaborn>=0.10.1',

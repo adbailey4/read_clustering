@@ -48,6 +48,13 @@ class VariantCall(object):
         self.data = pd.read_csv(file_path)
         self.canonical = {"A", "C", "G", "T"}
 
+    @staticmethod
+    def load_variant_data(variant_csv_path, label):
+        assert os.path.exists(variant_csv_path), f"variant_csv_path does not exist: {variant_csv_path}"
+        variant_data = pd.read_csv(variant_csv_path)
+        variant_data["label"] = label
+        return variant_data
+
     def get_read_ids(self):
         """Return the set of read ids """
         return set(self.data.read_id)
@@ -401,6 +408,7 @@ class VariantCall(object):
             bandwidth = estimate_bandwidth(X, quantile=quantile_val)
         else:
             bandwidth = 0.5
+        print(f"Bandwith selected: {bandwidth}")
         ms = MeanShift(bandwidth=bandwidth)
         mf = ms.fit(X)
         print('Number of clusters found: ', len(mf.cluster_centers_))
@@ -737,7 +745,8 @@ class VariantCall(object):
         return ks_df, min_p_val
 
     def positions_modification_plot_kmeans_clusters(self, positions, max_number_clusters, find_optimal=False,
-                                                    cluster_count=False, subunit_name='', threshold=0.5):
+                                                    cluster_count=False, subunit_name='', threshold=0.5,
+                                                    pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"]):
         fit, predict = self.k_means(positions, max_number_clusters=max_number_clusters, find_optimal=find_optimal)
         indexes = {i: np.where(fit.labels_ == i)[0] for i in range(fit.n_clusters)}
         X = self.get_reads_covering_positions_data(positions, plot=True)
@@ -754,9 +763,58 @@ class VariantCall(object):
                 color_df.at[[key], [pos]] = (len(X_modified) / len(X_pos)) * 100
 
         plt.figure(figsize=(18, 5))
-        ax = sns.heatmap(color_df.astype(float), annot=False, vmin=0, vmax=100, cmap="OrRd")
+        ax = sns.heatmap(color_df.astype(float), xticklabels=True, annot=False, vmin=0, vmax=100, cmap="OrRd")
         ax.hlines(list(range(0, len(indexes))), *ax.get_xlim(), linewidth=5, color='white')
         ax.set_title('Modification occurrence in ' + subunit_name + ' positions', fontsize=18)
         ax.set_xlabel("Positions (5' to 3')", fontsize=15)
         ax.set_ylabel('Cluster (kmeans)', fontsize=15)
+        pseduo_u_df = self.get_positions_of_variant_set(pseudou)
+        twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
+        pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == subunit_name]["reference_index"].values
+        twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == subunit_name]["reference_index"].values
+        [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in twoprimeo_pos]
         return plt.show()
+
+
+class VariantCalls(VariantCall):
+    """Read in variant call file and give access points to various types of data"""
+    def __init__(self, file_paths, labels):
+        super().__init__(file_paths[0])
+        data = []
+        for path, label in zip(file_paths, labels):
+            data.append(self.load_variant_data(path, label))
+        self.data = pd.concat(data, ignore_index=True)
+
+    def plot_UMAP_by_label(self, contig, positions, figure_path=None, **other_params):
+        data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
+        df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
+        X = df.dropna()
+        reducer = umap.UMAP()
+        umap_results = reducer.fit_transform(X)
+        X["umap_result_x"] = umap_results[:, 0]
+        X["umap_result_y"] = umap_results[:, 1]
+        #         predictor = hdbscan.HDBSCAN(min_cluster_size=cluster_size, gen_min_span_tree=True).fit_predict(X)
+        #         X["predictor"] = predictor
+        experiments = sorted(set(X.index.get_level_values(1)))
+        markers = mpl.markers.MarkerStyle.markers.keys()
+        colors = ('g', 'r', 'c', 'm', 'y', 'k', 'w', 'b')
+        marker = 'o'
+
+        plt.figure(figsize=(15, 15))
+        for color, experiment in zip(colors, experiments):
+            plot_data = X.xs(experiment, level="label")
+            #     plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=30, c=plot_data["predictor"].values, cmap='rainbow')
+            plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=3, cmap='rainbow', label=experiment)
+        #             plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=3, c=color, cmap='rainbow', label=experiment)
+
+        plt.xlabel("UMAP 1")
+        plt.ylabel("UMAP 2")
+        plt.legend()
+
+        plt.title(f"{contig}: {str(len(positions))} positions")
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path)
+        else:
+            plt.show()
