@@ -10,10 +10,12 @@
 
 import math
 import os
-
+import re
 import umap
 import hdbscan
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -785,36 +787,182 @@ class VariantCalls(VariantCall):
         for path, label in zip(file_paths, labels):
             data.append(self.load_variant_data(path, label))
         self.data = pd.concat(data, ignore_index=True)
+        self.experiments = sorted(labels)
+        self.color_map = dict(zip(self.experiments, sns.color_palette("tab10")))
 
-    def plot_UMAP_by_label(self, contig, positions, figure_path=None, **other_params):
+    def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, **other_params):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
         df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
         X = df.dropna()
-        reducer = umap.UMAP()
+        reducer = umap.UMAP(n_components=n_components)
         umap_results = reducer.fit_transform(X)
         X["umap_result_x"] = umap_results[:, 0]
         X["umap_result_y"] = umap_results[:, 1]
         #         predictor = hdbscan.HDBSCAN(min_cluster_size=cluster_size, gen_min_span_tree=True).fit_predict(X)
         #         X["predictor"] = predictor
-        experiments = sorted(set(X.index.get_level_values(1)))
         markers = mpl.markers.MarkerStyle.markers.keys()
-        colors = ('g', 'r', 'c', 'm', 'y', 'k', 'w', 'b')
         marker = 'o'
+        alpha = 0.5
+        #         colors = ('g', 'r', 'c', 'm', 'y', 'k', 'w', 'b')
 
-        plt.figure(figsize=(15, 15))
-        for color, experiment in zip(colors, experiments):
+        fig = plt.figure(figsize=(15, 15))
+        if n_components == 2:
+            ax = fig.add_subplot(111)
+        if n_components == 3:
+            ax = fig.add_subplot(111, projection='3d')
+            X["umap_result_z"] = umap_results[:, 2]
+
+        # for item in [fig, ax]:
+        #     item.patch.set_visible(False)
+
+
+        for experiment in self.experiments:
             plot_data = X.xs(experiment, level="label")
             #     plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=30, c=plot_data["predictor"].values, cmap='rainbow')
-            plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=3, cmap='rainbow', label=experiment)
-        #             plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=3, c=color, cmap='rainbow', label=experiment)
+            if n_components == 3:
+                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, plot_data["umap_result_z"].values, s=3, color=self.color_map[experiment], marker=marker, cmap='rainbow', label=experiment, alpha=alpha)
+            else:
+                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, s=3, color=self.color_map[experiment], marker=marker, cmap='rainbow', label=experiment, alpha=alpha)
 
-        plt.xlabel("UMAP 1")
-        plt.ylabel("UMAP 2")
+                #             plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=3, c=color, cmap='rainbow', label=experiment)
+
+        ax.set_xlabel("UMAP 1")
+        ax.set_ylabel("UMAP 2")
+        if n_components == 3:
+            ax.set_zlabel("UMAP 3")
         plt.legend()
 
         plt.title(f"{contig}: {str(len(positions))} positions")
         if figure_path is not None:
             assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
             plt.savefig(figure_path)
+        else:
+            plt.show()
+
+    def plot_heatmap_dendrogram(self, contig, positions, n=100, col_cluster=True,
+                                pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"], figure_path=None,
+                                method='average', metric='euclidean'):
+        data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
+        df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
+        X = df.dropna()
+        row_colors = pd.DataFrame(X.index.get_level_values(1))["label"].map(self.color_map)
+        # g = sns.heatmap(X[:n], xticklabels=True, yticklabels=False, annot=False, cmap="OrRd")
+
+        if n < 0 or n is None:
+            data = X.reset_index(drop=True)
+            row_colors = row_colors
+        else:
+            data = X.reset_index(drop=True)[:n]
+            row_colors = row_colors[:n]
+
+        g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster, yticklabels=False, xticklabels=True, cmap="OrRd", figsize=(20, 20))
+        ax = g.ax_heatmap
+
+        pseduo_u_df = self.get_positions_of_variant_set(pseudou)
+        twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
+        pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == contig]["reference_index"].values
+        twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == contig]["reference_index"].values
+        [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in twoprimeo_pos]
+
+
+
+
+        experiment_labels = []
+        for experiment, color in self.color_map.items():
+            red_patch = mpatches.Patch(color=color, label=experiment)
+            experiment_labels.append(red_patch)
+
+        red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
+        blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
+
+
+
+        first_legend = plt.legend(handles=experiment_labels, bbox_to_anchor=(1.5, 1.2), loc='upper left', ncol=1, title="Experiments")
+        plt.gca().add_artist(first_legend)
+
+        plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left', title="Modifications")
+        # h = [plt.plot([],[], color="gray", marker="o", ms=i, ls="")[0] for i in range(5,13)]
+        # plt.legend(handles=h, labels=range(5,13),loc=(1.03,0.5), title="Quality")
+
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path, dpi=1000)
+        else:
+            plt.show()
+
+    def plot_ld_heatmap(self, contig, positions, stat="r2", cmap="OrRd", norm=None,
+                        pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"], linewidths=0,
+                        figure_path=None):
+        options = ["r2", "D", "D'"]
+        assert stat in options, f"Stat {stat} cannot be found. Must select from: {options}"
+        data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
+        df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
+        X = df.dropna()
+        probs = (X > 0.5).mean()
+        ld_df = pd.DataFrame({"probA": probs, "probB": 1-probs})
+        for pos1 in ld_df.index.values:
+            ld_D = []
+            ld_D_prime = []
+            ld_coef_of_corr = []
+
+            for pos2 in ld_df.index.values:
+                joint_AB = np.mean((X[pos1] > 0.5) & (X[pos2] > 0.5))
+                joint_Ab = np.mean((X[pos1] > 0.5) & (X[pos2] <= 0.5))
+                joint_aB = np.mean((X[pos1] <= 0.5) & (X[pos2] > 0.5))
+                joint_ab = np.mean((X[pos1] <= 0.5) & (X[pos2] <= 0.5))
+                D = (joint_AB*joint_ab) - (joint_Ab*joint_aB)
+                D = (joint_AB*joint_ab) - (joint_Ab*joint_aB)
+                pA = ld_df.loc[pos1, "probA"]
+                pB = ld_df.loc[pos2, "probA"]
+                pa = ld_df.loc[pos1, "probB"]
+                pb = ld_df.loc[pos2, "probB"]
+
+                if D > 0:
+                    Dmax = min([pa*pB, pA*pb])
+                if D < 0:
+                    Dmax = min([pA*pB, pa*pb]) * -1
+                D_prime = D / Dmax
+                coef_of_corr = (D**2) / (pA*pB*pa*pb)
+
+                ld_D.append(D)
+                ld_D_prime.append(D_prime)
+                ld_coef_of_corr.append(coef_of_corr)
+            ld_df[f"{pos1}D"] = ld_D
+            ld_df[f"{pos1}D'"] = ld_D_prime
+            ld_df[f"{pos1}r2"] = ld_coef_of_corr
+
+        d_stats = ld_df.loc[:, ld_df.columns.str.endswith(stat)]
+        # Generate a mask for the upper triangle
+        mask = np.triu(np.ones_like(d_stats, dtype=bool))
+        # Set up the matplotlib figure
+        f, ax = plt.subplots(figsize=(16, 14))
+        # Generate a custom diverging colormap
+        #         im = ax.imshow(data, cmap=plt.cm.hot, interpolation='none', vmax=threshold)
+        #         cbar = fig.colorbar(im, extend='max')
+        #         cbar.cmap.set_over('green')
+        # Draw the heatmap with the mask and correct aspect ratio
+        ax = sns.heatmap(d_stats, mask=mask, cmap=cmap, yticklabels=True, xticklabels=True,
+                         square=True, linewidths=linewidths, cbar_kws={"shrink": .5}, norm=norm, vmax=0.4)
+        pseduo_u_df = self.get_positions_of_variant_set(pseudou)
+        twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
+        pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == contig]["reference_index"].values
+        twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == contig]["reference_index"].values
+        [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
+        [t.set_color('red') for t in ax.yaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.yaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
+
+        #         experiment_labels = []
+        #         for experiment, color in self.color_map.items():
+        #             red_patch = mpatches.Patch(color=color, label=experiment)
+        #             experiment_labels.append(red_patch)
+
+        red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
+        blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
+        plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(0, 1), loc='lower right', title="Modifications")
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path, dpi=1000)
         else:
             plt.show()
