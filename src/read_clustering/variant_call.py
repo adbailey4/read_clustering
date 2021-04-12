@@ -855,7 +855,8 @@ class VariantCalls(VariantCall):
             data = X.reset_index(drop=True)[:n]
             row_colors = row_colors[:n]
 
-        g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster, yticklabels=False, xticklabels=True, cmap="OrRd", figsize=(20, 20))
+        g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster,
+                           yticklabels=False, xticklabels=True, cmap="OrRd", figsize=(20, 20))
         ax = g.ax_heatmap
 
         pseduo_u_df = self.get_positions_of_variant_set(pseudou)
@@ -865,9 +866,6 @@ class VariantCalls(VariantCall):
         [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in pseduo_u_pos]
         [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in twoprimeo_pos]
 
-
-
-
         experiment_labels = []
         for experiment, color in self.color_map.items():
             red_patch = mpatches.Patch(color=color, label=experiment)
@@ -875,8 +873,6 @@ class VariantCalls(VariantCall):
 
         red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
         blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
-
-
 
         first_legend = plt.legend(handles=experiment_labels, bbox_to_anchor=(1.5, 1.2), loc='upper left', ncol=1, title="Experiments")
         plt.gca().add_artist(first_legend)
