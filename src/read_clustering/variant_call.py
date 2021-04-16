@@ -788,12 +788,21 @@ class VariantCalls(VariantCall):
             data.append(self.load_variant_data(path, label))
         self.data = pd.concat(data, ignore_index=True)
         self.experiments = sorted(labels)
-        self.color_map = dict(zip(self.experiments, sns.color_palette("tab10")))
+        self.color_map = dict(zip(self.experiments, sns.color_palette("tab20")))
 
-    def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, **other_params):
+    def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, n=None, **other_params):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
-        df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
+        df = data.pivot(index=['label', 'read_id'], columns=['reference_index'], values='prob2')
         X = df.dropna()
+        if n is not None:
+            df = []
+            for x in self.experiments:
+                a = X.loc[x][:n]
+                a["label"] = x
+                a["read_id"] = a.index
+                df.append(a.set_index(["label", "read_id"]))
+            X = pd.concat(df)
+
         reducer = umap.UMAP(n_components=n_components)
         umap_results = reducer.fit_transform(X)
         X["umap_result_x"] = umap_results[:, 0]
@@ -814,7 +823,6 @@ class VariantCalls(VariantCall):
 
         # for item in [fig, ax]:
         #     item.patch.set_visible(False)
-
 
         for experiment in self.experiments:
             plot_data = X.xs(experiment, level="label")
@@ -841,28 +849,38 @@ class VariantCalls(VariantCall):
 
     def plot_heatmap_dendrogram(self, contig, positions, n=100, col_cluster=True,
                                 pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"], figure_path=None,
-                                method='average', metric='euclidean'):
+                                method='average', metric='euclidean', row_cluster=True,
+                                pseduo_u_pos=None, twoprimeo_pos=None):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
-        df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
+        df = data.pivot(index=['label', 'read_id'], columns=['reference_index'], values='prob2')
         X = df.dropna()
-        row_colors = pd.DataFrame(X.index.get_level_values(1))["label"].map(self.color_map)
+        X = X.sort_index()
         # g = sns.heatmap(X[:n], xticklabels=True, yticklabels=False, annot=False, cmap="OrRd")
 
-        if n < 0 or n is None:
-            data = X.reset_index(drop=True)
-            row_colors = row_colors
-        else:
-            data = X.reset_index(drop=True)[:n]
-            row_colors = row_colors[:n]
+        if n is not None:
+            df = []
+            for x in self.experiments:
+                a = X.loc[x][:n]
+                a["label"] = x
+                a["read_id"] = a.index
+                df.append(a.set_index(["label", "read_id"]))
+            X = pd.concat(df)
+
+        row_colors = pd.DataFrame(X.index.get_level_values(0))["label"].map(self.color_map)
+        data = X.reset_index(drop=True)
 
         g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster,
+                           row_cluster=row_cluster,
                            yticklabels=False, xticklabels=True, cmap="OrRd", figsize=(20, 20))
         ax = g.ax_heatmap
 
-        pseduo_u_df = self.get_positions_of_variant_set(pseudou)
-        twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
-        pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == contig]["reference_index"].values
-        twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == contig]["reference_index"].values
+        if pseduo_u_pos is None:
+            pseduo_u_df = self.get_positions_of_variant_set(pseudou)
+            pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == contig]["reference_index"].values
+        if twoprimeo_pos is None:
+            twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
+            twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == contig]["reference_index"].values
+
         [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in pseduo_u_pos]
         [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in twoprimeo_pos]
 
