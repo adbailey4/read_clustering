@@ -58,6 +58,6 @@ setup(
         'scipy>=1.5.0',
         'shapely>=1.7.0',
         'kneed>=0.6.0',
-        'umap-learn==0.5.0'],
+        'umap-learn>=0.5.0'],
     setup_requires=['Cython>=0.29.21']
 )

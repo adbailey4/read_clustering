@@ -36,7 +36,7 @@ from yellowbrick.cluster import KElbowVisualizer
 from sklearn import metrics
 from kneed import KneeLocator
 
-sns.set()
+# sns.set()
 
 
 class VariantCall(object):
@@ -598,11 +598,13 @@ class VariantCall(object):
             plt.show()
         return figure_path
 
-    def plot_UMAP_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None,
+    def plot_UMAP_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None, W=None,
                                                 **other_params):
         # **other_params can be : n_clusters=,affinity=, max_number_clusters=, cluster_size=,eps=, min_samples=,
         # n_components=, find_optimal=,  according to what each clustering method requires
         X = self.get_reads_covering_positions_data(positions, plot=True)
+        if W is not None:
+            X = np.multiply(X, W)
         reducer = umap.UMAP()
         umap_results = reducer.fit_transform(X)
         method_to_call = getattr(self, clustering_algorithm)
@@ -781,14 +783,14 @@ class VariantCall(object):
 
 class VariantCalls(VariantCall):
     """Read in variant call file and give access points to various types of data"""
-    def __init__(self, file_paths, labels):
+    def __init__(self, file_paths, labels, color_map="tab20"):
         super().__init__(file_paths[0])
         data = []
         for path, label in zip(file_paths, labels):
             data.append(self.load_variant_data(path, label))
         self.data = pd.concat(data, ignore_index=True)
         self.experiments = sorted(labels)
-        self.color_map = dict(zip(self.experiments, sns.color_palette("tab20")))
+        self.color_map = dict(zip(self.experiments, sns.color_palette(color_map)))
 
     def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, n=None, **other_params):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
@@ -811,7 +813,6 @@ class VariantCalls(VariantCall):
         #         X["predictor"] = predictor
         markers = mpl.markers.MarkerStyle.markers.keys()
         marker = 'o'
-        alpha = 0.5
         #         colors = ('g', 'r', 'c', 'm', 'y', 'k', 'w', 'b')
 
         fig = plt.figure(figsize=(15, 15))
@@ -820,6 +821,7 @@ class VariantCalls(VariantCall):
         if n_components == 3:
             ax = fig.add_subplot(111, projection='3d')
             X["umap_result_z"] = umap_results[:, 2]
+        ax.set_facecolor("white")
 
         # for item in [fig, ax]:
         #     item.patch.set_visible(False)
@@ -828,9 +830,9 @@ class VariantCalls(VariantCall):
             plot_data = X.xs(experiment, level="label")
             #     plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=30, c=plot_data["predictor"].values, cmap='rainbow')
             if n_components == 3:
-                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, plot_data["umap_result_z"].values, s=3, color=self.color_map[experiment], marker=marker, cmap='rainbow', label=experiment, alpha=alpha)
+                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, plot_data["umap_result_z"].values, color=self.color_map[experiment], marker=marker, label=experiment, **other_params)
             else:
-                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, s=3, color=self.color_map[experiment], marker=marker, cmap='rainbow', label=experiment, alpha=alpha)
+                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, color=self.color_map[experiment], marker=marker, label=experiment, **other_params)
 
                 #             plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=3, c=color, cmap='rainbow', label=experiment)
 
@@ -898,6 +900,8 @@ class VariantCalls(VariantCall):
         plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left', title="Modifications")
         # h = [plt.plot([],[], color="gray", marker="o", ms=i, ls="")[0] for i in range(5,13)]
         # plt.legend(handles=h, labels=range(5,13),loc=(1.03,0.5), title="Quality")
+        labels = [str(int(item.get_text())+1) for item in ax.get_xticklabels()]
+        ax.set_xticklabels(labels)
 
         if figure_path is not None:
             assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
@@ -905,14 +909,27 @@ class VariantCalls(VariantCall):
         else:
             plt.show()
 
+    def get_X(self, contig, positions):
+        data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
+        df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
+        X = df.dropna()
+        X = X.sort_index()
+        return X
+
     def plot_ld_heatmap(self, contig, positions, stat="r2", cmap="OrRd", norm=None,
                         pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"], linewidths=0,
-                        figure_path=None):
+                        figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None):
         options = ["r2", "D", "D'"]
         assert stat in options, f"Stat {stat} cannot be found. Must select from: {options}"
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
         df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
         X = df.dropna()
+        return self._plot_ld_heatmap(X, contig, stat, cmap, norm, pseudou, twoprimeo, linewidths, figure_path,
+                              pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, vmax=vmax)
+
+    def _plot_ld_heatmap(self, X, contig, stat="r2", cmap="OrRd", norm=None,
+                         pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"], linewidths=0,
+                         figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None):
         probs = (X > 0.5).mean()
         ld_df = pd.DataFrame({"probA": probs, "probB": 1-probs})
         for pos1 in ld_df.index.values:
@@ -925,12 +942,11 @@ class VariantCalls(VariantCall):
                 joint_Ab = np.mean((X[pos1] > 0.5) & (X[pos2] <= 0.5))
                 joint_aB = np.mean((X[pos1] <= 0.5) & (X[pos2] > 0.5))
                 joint_ab = np.mean((X[pos1] <= 0.5) & (X[pos2] <= 0.5))
-                D = (joint_AB*joint_ab) - (joint_Ab*joint_aB)
-                D = (joint_AB*joint_ab) - (joint_Ab*joint_aB)
                 pA = ld_df.loc[pos1, "probA"]
                 pB = ld_df.loc[pos2, "probA"]
                 pa = ld_df.loc[pos1, "probB"]
                 pb = ld_df.loc[pos2, "probB"]
+                D = joint_AB - (pA*pB)
 
                 if D > 0:
                     Dmax = min([pa*pB, pA*pb])
@@ -957,17 +973,23 @@ class VariantCalls(VariantCall):
         #         cbar.cmap.set_over('green')
         # Draw the heatmap with the mask and correct aspect ratio
         ax = sns.heatmap(d_stats, mask=mask, cmap=cmap, yticklabels=True, xticklabels=True,
-                         square=True, linewidths=linewidths, cbar_kws={"shrink": .5}, norm=norm, vmax=0.4)
-        pseduo_u_df = self.get_positions_of_variant_set(pseudou)
-        twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
-        pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == contig]["reference_index"].values
-        twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == contig]["reference_index"].values
+                         square=True, linewidths=linewidths, cbar_kws={"shrink": .5}, norm=norm, vmax=vmax) #vmax
+        if pseduo_u_pos is None:
+            pseduo_u_df = self.get_positions_of_variant_set(pseudou)
+            pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == contig]["reference_index"].values
+        if twoprimeo_pos is None:
+            twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
+            twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == contig]["reference_index"].values
         [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
         [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
         [t.set_color('red') for t in ax.yaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
         [t.set_color('blue') for t in ax.yaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
+        ax.set_xticks(ax.get_yticks())
+        ax.set_xticklabels([int(x.get_text())+1 for x in ax.get_yticklabels()])
+        ax.set_yticks(ax.get_xticks())
+        ax.set_yticklabels(ax.get_xticklabels())
 
-        #         experiment_labels = []
+    #         experiment_labels = []
         #         for experiment, color in self.color_map.items():
         #             red_patch = mpatches.Patch(color=color, label=experiment)
         #             experiment_labels.append(red_patch)
@@ -980,3 +1002,5 @@ class VariantCalls(VariantCall):
             plt.savefig(figure_path, dpi=1000)
         else:
             plt.show()
+
+        return d_stats
