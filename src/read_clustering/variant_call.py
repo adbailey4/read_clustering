@@ -35,6 +35,8 @@ from sklearn.cluster import AffinityPropagation, AgglomerativeClustering, DBSCAN
 from yellowbrick.cluster import KElbowVisualizer
 from sklearn import metrics
 from kneed import KneeLocator
+from pathlib import Path
+
 
 # sns.set()
 
@@ -783,14 +785,27 @@ class VariantCall(object):
 
 class VariantCalls(VariantCall):
     """Read in variant call file and give access points to various types of data"""
+
     def __init__(self, file_paths, labels, color_map="tab20"):
         super().__init__(file_paths[0])
         data = []
+        self.labels = labels
+        self.file_paths = file_paths
         for path, label in zip(file_paths, labels):
             data.append(self.load_variant_data(path, label))
         self.data = pd.concat(data, ignore_index=True)
         self.experiments = sorted(labels)
         self.color_map = dict(zip(self.experiments, sns.color_palette(color_map)))
+        self.pseduo_u_pos = [775, 959, 965, 985, 989, 1003, 1041, 1051, 1055, 1109, 1123,
+                             2128, 2132, 2190, 2257, 2259, 2263, 2265, 2313, 2339, 2348, 2350,
+                             2415, 2734, 2825, 2864, 2879, 2922, 2943, 2974, 105, 119, 210, 301, 465, 631, 758, 765,
+                             998, 1180, 1186,
+                             1289, 1414]
+        self.twoprimeo_pos = [648, 649, 662, 804, 806, 816, 866, 875, 897, 907, 1132,
+                              1436, 1448, 1449, 1887, 2196, 2219, 2255, 2279, 2280, 2287, 2336,
+                              2346, 2416, 2420, 2618, 2639, 2723, 2728, 2790, 2792, 2814, 2920,
+                              2921, 2945, 2947, 2958, 27, 99, 413, 419, 435, 540, 561, 577, 618, 795, 973,
+                              1006, 1125, 1268, 1270, 1427, 1571, 1638]
 
     def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, n=None, **other_params):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
@@ -830,9 +845,12 @@ class VariantCalls(VariantCall):
             plot_data = X.xs(experiment, level="label")
             #     plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=30, c=plot_data["predictor"].values, cmap='rainbow')
             if n_components == 3:
-                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, plot_data["umap_result_z"].values, color=self.color_map[experiment], marker=marker, label=experiment, **other_params)
+                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values,
+                           plot_data["umap_result_z"].values, color=self.color_map[experiment], marker=marker,
+                           label=experiment, **other_params)
             else:
-                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, color=self.color_map[experiment], marker=marker, label=experiment, **other_params)
+                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values,
+                           color=self.color_map[experiment], marker=marker, label=experiment, **other_params)
 
                 #             plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=3, c=color, cmap='rainbow', label=experiment)
 
@@ -849,26 +867,45 @@ class VariantCalls(VariantCall):
         else:
             plt.show()
 
-    def plot_heatmap_dendrogram(self, contig, positions, n=100, col_cluster=True,
-                                pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"], figure_path=None,
-                                method='average', metric='euclidean', row_cluster=True,
-                                pseduo_u_pos=None, twoprimeo_pos=None):
-        data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
-        df = data.pivot(index=['label', 'read_id'], columns=['reference_index'], values='prob2')
-        X = df.dropna()
-        X = X.sort_index()
-        # g = sns.heatmap(X[:n], xticklabels=True, yticklabels=False, annot=False, cmap="OrRd")
+    def plot_all_heatmap_dendrograms(self, output_dir, labels=None, n=None, col_cluster=False,
+                                     method='average', metric='correlation', row_cluster=True,
+                                     pseduo_u_pos=None, twoprimeo_pos=None):
+        """Plot all clustering heatmaps for each experiment and save to directory
+        :param n: number of reads to include in clustering
+        :param col_cluster: bool, cluster columns
+        :param method: clustering method
+        :param metric: clustering metric
+        :param row_cluster: boolean option to cluster rows
+        :param twoprimeo_pos: optional list of twoprimeo positions
+        :param pseduo_u_pos: optional list of pseudoU positions
+        :param output_dir: output directory
+        :param labels: list of labels to cluster and plot
+        """
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        if labels is None:
+            labels = self.labels
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label)
+                figure_path = os.path.join(output_dir, f"{label}_{contig}_{n}_{metric}.png")
+                self._plot_heatmap_dendrogram(X, n=n, col_cluster=col_cluster, figure_path=figure_path,
+                                              method=method, metric=metric, row_cluster=row_cluster,
+                                              pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos)
 
+    def _plot_heatmap_dendrogram(self, X, n=100, col_cluster=True, figure_path=None,
+                                 method='average', metric='euclidean', row_cluster=True,
+                                 pseduo_u_pos=None, twoprimeo_pos=None):
         if n is not None:
             df = []
             for x in self.experiments:
-                a = X.loc[x][:n]
+                a = X.xs("ivt", level="label")
                 a["label"] = x
                 a["read_id"] = a.index
-                df.append(a.set_index(["label", "read_id"]))
-            X = pd.concat(df)
+                df.append(a.set_index(["read_id", "label"]))
+            z = pd.concat(df)
 
-        row_colors = pd.DataFrame(X.index.get_level_values(0))["label"].map(self.color_map)
+        row_colors = pd.DataFrame(X.index.get_level_values(1))["label"].map(self.color_map)
         data = X.reset_index(drop=True)
 
         g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster,
@@ -877,11 +914,9 @@ class VariantCalls(VariantCall):
         ax = g.ax_heatmap
 
         if pseduo_u_pos is None:
-            pseduo_u_df = self.get_positions_of_variant_set(pseudou)
-            pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == contig]["reference_index"].values
+            pseduo_u_pos = self.pseduo_u_pos
         if twoprimeo_pos is None:
-            twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
-            twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == contig]["reference_index"].values
+            twoprimeo_pos = self.twoprimeo_pos
 
         [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in pseduo_u_pos]
         [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in twoprimeo_pos]
@@ -894,13 +929,15 @@ class VariantCalls(VariantCall):
         red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
         blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
 
-        first_legend = plt.legend(handles=experiment_labels, bbox_to_anchor=(1.5, 1.2), loc='upper left', ncol=1, title="Experiments")
+        first_legend = plt.legend(handles=experiment_labels, bbox_to_anchor=(1.5, 1.2), loc='upper left', ncol=1,
+                                  title="Experiments")
         plt.gca().add_artist(first_legend)
 
-        plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left', title="Modifications")
+        plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left',
+                   title="Modifications")
         # h = [plt.plot([],[], color="gray", marker="o", ms=i, ls="")[0] for i in range(5,13)]
         # plt.legend(handles=h, labels=range(5,13),loc=(1.03,0.5), title="Quality")
-        labels = [str(int(item.get_text())+1) for item in ax.get_xticklabels()]
+        labels = [str(int(item.get_text()) + 1) for item in ax.get_xticklabels()]
         ax.set_xticklabels(labels)
 
         if figure_path is not None:
@@ -909,60 +946,43 @@ class VariantCalls(VariantCall):
         else:
             plt.show()
 
-    def get_X(self, contig, positions):
+    def plot_heatmap_dendrogram(self, contig, positions, label=None, n=100, col_cluster=True,
+                                figure_path=None, method='average', metric='euclidean', row_cluster=True,
+                                pseduo_u_pos=None, twoprimeo_pos=None):
+        X = self.get_X(contig, positions, label=label)
+        if pseduo_u_pos is None:
+            pseduo_u_pos = self.pseduo_u_pos
+        if twoprimeo_pos is None:
+            twoprimeo_pos = self.twoprimeo_pos
+        # g = sns.heatmap(X[:n], xticklabels=True, yticklabels=False, annot=False, cmap="OrRd")
+        self._plot_heatmap_dendrogram(X, n=n, col_cluster=col_cluster, figure_path=figure_path,
+                                      method=method, metric=metric, row_cluster=row_cluster,
+                                      pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos)
+
+    def get_X(self, contig, positions, label=None):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
         df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
         X = df.dropna()
         X = X.sort_index()
+        if label is not None:
+            assert label in self.labels, f"Input label [{label}] is not in {self.labels}"
+            # X = X.xs(label, level="label")
+            X = X.loc[(slice(None), label), :]
         return X
 
-    def plot_ld_heatmap(self, contig, positions, stat="r2", cmap="OrRd", norm=None,
-                        pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"], linewidths=0,
+    def plot_ld_heatmap(self, contig, positions, stat="r2", cmap="OrRd", norm=None, linewidths=0,
                         figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None):
         options = ["r2", "D", "D'"]
         assert stat in options, f"Stat {stat} cannot be found. Must select from: {options}"
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
         df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
         X = df.dropna()
-        return self._plot_ld_heatmap(X, contig, stat, cmap, norm, pseudou, twoprimeo, linewidths, figure_path,
-                              pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, vmax=vmax)
+        return self._plot_ld_heatmap(X, stat, cmap, norm, linewidths, figure_path,
+                                     pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, vmax=vmax)
 
-    def _plot_ld_heatmap(self, X, contig, stat="r2", cmap="OrRd", norm=None,
-                         pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"], linewidths=0,
+    def _plot_ld_heatmap(self, X, stat="r2", cmap="OrRd", norm=None, linewidths=0,
                          figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None):
-        probs = (X > 0.5).mean()
-        ld_df = pd.DataFrame({"probA": probs, "probB": 1-probs})
-        for pos1 in ld_df.index.values:
-            ld_D = []
-            ld_D_prime = []
-            ld_coef_of_corr = []
-
-            for pos2 in ld_df.index.values:
-                joint_AB = np.mean((X[pos1] > 0.5) & (X[pos2] > 0.5))
-                joint_Ab = np.mean((X[pos1] > 0.5) & (X[pos2] <= 0.5))
-                joint_aB = np.mean((X[pos1] <= 0.5) & (X[pos2] > 0.5))
-                joint_ab = np.mean((X[pos1] <= 0.5) & (X[pos2] <= 0.5))
-                pA = ld_df.loc[pos1, "probA"]
-                pB = ld_df.loc[pos2, "probA"]
-                pa = ld_df.loc[pos1, "probB"]
-                pb = ld_df.loc[pos2, "probB"]
-                D = joint_AB - (pA*pB)
-
-                if D > 0:
-                    Dmax = min([pa*pB, pA*pb])
-                if D < 0:
-                    Dmax = min([pA*pB, pa*pb]) * -1
-                D_prime = D / Dmax
-                coef_of_corr = (D**2) / (pA*pB*pa*pb)
-
-                ld_D.append(D)
-                ld_D_prime.append(D_prime)
-                ld_coef_of_corr.append(coef_of_corr)
-            ld_df[f"{pos1}D"] = ld_D
-            ld_df[f"{pos1}D'"] = ld_D_prime
-            ld_df[f"{pos1}r2"] = ld_coef_of_corr
-
-        d_stats = ld_df.loc[:, ld_df.columns.str.endswith(stat)]
+        d_stats = self.get_correlation(X, stat)
         # Generate a mask for the upper triangle
         mask = np.triu(np.ones_like(d_stats, dtype=bool))
         # Set up the matplotlib figure
@@ -973,30 +993,33 @@ class VariantCalls(VariantCall):
         #         cbar.cmap.set_over('green')
         # Draw the heatmap with the mask and correct aspect ratio
         ax = sns.heatmap(d_stats, mask=mask, cmap=cmap, yticklabels=True, xticklabels=True,
-                         square=True, linewidths=linewidths, cbar_kws={"shrink": .5}, norm=norm, vmax=vmax) #vmax
+                         square=True, linewidths=linewidths, cbar_kws={"shrink": .5}, norm=norm, vmax=vmax)  # vmax
         if pseduo_u_pos is None:
-            pseduo_u_df = self.get_positions_of_variant_set(pseudou)
-            pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == contig]["reference_index"].values
+            pseduo_u_pos = self.pseduo_u_pos
         if twoprimeo_pos is None:
-            twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
-            twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == contig]["reference_index"].values
-        [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
-        [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
-        [t.set_color('red') for t in ax.yaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
-        [t.set_color('blue') for t in ax.yaxis.get_ticklabels() if int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
+            twoprimeo_pos = self.twoprimeo_pos
+        [t.set_color('red') for t in ax.xaxis.get_ticklabels() if
+         int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if
+         int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
+        [t.set_color('red') for t in ax.yaxis.get_ticklabels() if
+         int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.yaxis.get_ticklabels() if
+         int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
         ax.set_xticks(ax.get_yticks())
-        ax.set_xticklabels([int(x.get_text())+1 for x in ax.get_yticklabels()])
+        ax.set_xticklabels([int(x.get_text()) + 1 for x in ax.get_yticklabels()])
         ax.set_yticks(ax.get_xticks())
         ax.set_yticklabels(ax.get_xticklabels())
 
-    #         experiment_labels = []
+        #         experiment_labels = []
         #         for experiment, color in self.color_map.items():
         #             red_patch = mpatches.Patch(color=color, label=experiment)
         #             experiment_labels.append(red_patch)
 
         red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
         blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
-        plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(0, 1), loc='lower right', title="Modifications")
+        plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(0, 1), loc='lower right',
+                   title="Modifications")
         if figure_path is not None:
             assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
             plt.savefig(figure_path, dpi=1000)
@@ -1004,3 +1027,138 @@ class VariantCalls(VariantCall):
             plt.show()
 
         return d_stats
+
+    def get_r2(self, a, b):
+        return self.get_corr(a, b, stat="r2")
+
+    def get_d(self, a, b):
+        return self.get_corr(a, b, stat="D")
+
+    def get_d_prime(self, a, b):
+        return self.get_corr(a, b, stat="D'")
+
+    @staticmethod
+    def get_corr(a, b, stat="r2"):
+        joint_AB = np.mean((a >= 0.5) & (b >= 0.5))
+        pA = (a >= 0.5).mean()
+        pB = (b >= 0.5).mean()
+        pa = (a < 0.5).mean()
+        pb = (b < 0.5).mean()
+        D = joint_AB - (pA * pB)
+        if D > 0:
+            Dmax = min([pa * pB, pA * pb])
+        if D < 0:
+            Dmax = min([pA * pB, pa * pb]) * -1
+        if D == 0:
+            D_prime = 0
+        else:
+            D_prime = D / Dmax
+        denom = (pA * pB * pa * pb)
+        if denom == 0:
+            coef_of_corr = 0
+        else:
+            coef_of_corr = (D ** 2) / (pA * pB * pa * pb)
+
+        if stat == "D":
+            return D
+        elif stat == "D'":
+            return D_prime
+        elif stat == "r2":
+            return coef_of_corr
+
+    def write_correlations(self, output_path, stat="r2", labels=None):
+        """Write out correlations within each experiment to a csv file
+
+        :param output_path: path to output file
+        :param stat: optional statistic to use
+        :param labels: optional labels to use instead of all experiments
+        """
+        data = self.get_experiment_correlations(stat=stat, labels=labels)
+        data.to_csv(output_path, index=False)
+        return True
+
+    def get_method(self, stat):
+        if stat == "r2":
+            return self.get_r2
+        if stat == "D":
+            return self.get_d
+        if stat == "D'":
+            return self.get_d_prime
+        else:
+            return stat
+
+    def get_correlation(self, X, stat="r2"):
+        return X.corr(self.get_method(stat))
+
+    def get_experiment_correlations(self, stat="r2", labels=None):
+        """Get correlations of each experiment
+
+        :param stat: optional statistic to use
+        :param labels: optional labels to use instead of all experiments
+        """
+        if labels is None:
+            labels = self.labels
+
+        data = None
+        order = ['ref_index1', 'ref_index2', "contig"]
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            order.append(label)
+            label_df = None
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label)
+                correlations = self.get_correlation(X, stat)
+                df = correlations.rename_axis(None).rename_axis(None, axis=1)
+                df_corr = df.stack().reset_index()
+                df_corr.columns = ['ref_index1', 'ref_index2', label]
+                mask_dups = (df_corr[['ref_index1', 'ref_index2']].apply(frozenset, axis=1).duplicated()) | (
+                        df_corr['ref_index1'] == df_corr['ref_index2'])
+                df_corr = df_corr[~mask_dups]
+                df_corr["contig"] = contig
+                if label_df is None:
+                    label_df = df_corr
+                else:
+                    label_df = pd.concat([label_df, df_corr])
+
+            if data is None:
+                data = label_df
+            else:
+                data = pd.merge(data, label_df, how="outer", on=['ref_index1', 'ref_index2', "contig"])
+        return data[order]
+
+    def get_experiment_percent_modified(self, labels=None):
+        """Get percent modified of each position for each experiment
+
+        :param labels: optional labels to use instead of all experiments
+        """
+        order = ["contig"]
+        if labels is None:
+            labels = self.labels
+        data = None
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            order.append(label)
+            label_df = None
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label)
+                probs = pd.DataFrame((X >= 0.5).mean()).rename(columns={0: label})
+                probs["contig"] = contig
+                if label_df is None:
+                    label_df = probs
+                else:
+                    label_df = pd.concat([label_df, probs])
+            if data is None:
+                data = label_df
+            else:
+                data = pd.merge(data, label_df, how="outer", on=["reference_index", "contig"])
+        data = data[order]
+        return data
+
+    def write_experiment_percent_modified(self, output_path, labels=None):
+        """Write percent modified of each position for each experiment
+
+        :param output_path: path to output file
+        :param labels: optional labels to use instead of all experiments
+        """
+        self.get_experiment_percent_modified(labels=labels).to_csv(output_path)
+        return True
