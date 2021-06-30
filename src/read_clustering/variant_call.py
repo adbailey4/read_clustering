@@ -807,7 +807,7 @@ class VariantCalls(VariantCall):
                               2921, 2945, 2947, 2958, 27, 99, 413, 419, 435, 540, 561, 577, 618, 795, 973,
                               1006, 1125, 1268, 1270, 1427, 1571, 1638]
 
-    def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, n=None, **other_params):
+    def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, n=None, legend=True, **other_params):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
         df = data.pivot(index=['label', 'read_id'], columns=['reference_index'], values='prob2')
         X = df.dropna()
@@ -858,19 +858,21 @@ class VariantCalls(VariantCall):
         ax.set_ylabel("UMAP 2")
         if n_components == 3:
             ax.set_zlabel("UMAP 3")
-        plt.legend()
+        if legend:
+            plt.legend()
 
         plt.title(f"{contig}: {str(len(positions))} positions")
         if figure_path is not None:
             assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
-            plt.savefig(figure_path)
+            plt.savefig(figure_path, dpi=1000)
         else:
             plt.show()
 
     def plot_all_heatmap_dendrograms(self, output_dir, labels=None, n=None, col_cluster=False,
                                      method='average', metric='correlation', row_cluster=True,
-                                     pseduo_u_pos=None, twoprimeo_pos=None):
+                                     pseduo_u_pos=None, twoprimeo_pos=None, legend=True):
         """Plot all clustering heatmaps for each experiment and save to directory
+        :param legend: boolean option to plot legend
         :param n: number of reads to include in clustering
         :param col_cluster: bool, cluster columns
         :param method: clustering method
@@ -891,19 +893,19 @@ class VariantCalls(VariantCall):
                 figure_path = os.path.join(output_dir, f"{label}_{contig}_{n}_{metric}.png")
                 self._plot_heatmap_dendrogram(X, n=n, col_cluster=col_cluster, figure_path=figure_path,
                                               method=method, metric=metric, row_cluster=row_cluster,
-                                              pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos)
+                                              pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend)
 
     def _plot_heatmap_dendrogram(self, X, n=100, col_cluster=True, figure_path=None,
                                  method='average', metric='euclidean', row_cluster=True,
-                                 pseduo_u_pos=None, twoprimeo_pos=None):
+                                 pseduo_u_pos=None, twoprimeo_pos=None, legend=True):
         if n is not None:
             df = []
             for x in self.experiments:
-                a = X.xs("ivt", level="label")
+                a = X.xs(x, level="label")[:n]
                 a["label"] = x
                 a["read_id"] = a.index
                 df.append(a.set_index(["read_id", "label"]))
-            z = pd.concat(df)
+            X = pd.concat(df)
 
         row_colors = pd.DataFrame(X.index.get_level_values(1))["label"].map(self.color_map)
         data = X.reset_index(drop=True)
@@ -911,6 +913,9 @@ class VariantCalls(VariantCall):
         g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster,
                            row_cluster=row_cluster,
                            yticklabels=False, xticklabels=True, cmap="OrRd", figsize=(20, 20))
+
+        if not legend:
+            g.cax.set_visible(False)
         ax = g.ax_heatmap
 
         if pseduo_u_pos is None:
@@ -929,12 +934,13 @@ class VariantCalls(VariantCall):
         red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
         blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
 
-        first_legend = plt.legend(handles=experiment_labels, bbox_to_anchor=(1.5, 1.2), loc='upper left', ncol=1,
-                                  title="Experiments")
-        plt.gca().add_artist(first_legend)
+        if legend:
+            first_legend = plt.legend(handles=experiment_labels, bbox_to_anchor=(1.5, 1.2), loc='upper left', ncol=1,
+                                      title="Experiments")
+            plt.gca().add_artist(first_legend)
 
-        plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left',
-                   title="Modifications")
+            plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left',
+                       title="Modifications")
         # h = [plt.plot([],[], color="gray", marker="o", ms=i, ls="")[0] for i in range(5,13)]
         # plt.legend(handles=h, labels=range(5,13),loc=(1.03,0.5), title="Quality")
         labels = [str(int(item.get_text()) + 1) for item in ax.get_xticklabels()]
@@ -948,7 +954,7 @@ class VariantCalls(VariantCall):
 
     def plot_heatmap_dendrogram(self, contig, positions, label=None, n=100, col_cluster=True,
                                 figure_path=None, method='average', metric='euclidean', row_cluster=True,
-                                pseduo_u_pos=None, twoprimeo_pos=None):
+                                pseduo_u_pos=None, twoprimeo_pos=None, legend=True):
         X = self.get_X(contig, positions, label=label)
         if pseduo_u_pos is None:
             pseduo_u_pos = self.pseduo_u_pos
@@ -957,7 +963,7 @@ class VariantCalls(VariantCall):
         # g = sns.heatmap(X[:n], xticklabels=True, yticklabels=False, annot=False, cmap="OrRd")
         self._plot_heatmap_dendrogram(X, n=n, col_cluster=col_cluster, figure_path=figure_path,
                                       method=method, metric=metric, row_cluster=row_cluster,
-                                      pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos)
+                                      pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend)
 
     def get_X(self, contig, positions, label=None):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
