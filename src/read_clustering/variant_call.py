@@ -11,6 +11,8 @@
 import math
 import os
 import re
+
+import scipy.stats
 import umap
 import hdbscan
 import matplotlib.pyplot as plt
@@ -807,7 +809,8 @@ class VariantCalls(VariantCall):
                               2921, 2945, 2947, 2958, 27, 99, 413, 419, 435, 540, 561, 577, 618, 795, 973,
                               1006, 1125, 1268, 1270, 1427, 1571, 1638]
 
-    def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, n=None, legend=True, **other_params):
+    def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, n=None, legend=True,
+                           **other_params):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
         df = data.pivot(index=['label', 'read_id'], columns=['reference_index'], values='prob2')
         X = df.dropna()
@@ -869,9 +872,10 @@ class VariantCalls(VariantCall):
             plt.show()
 
     def plot_all_heatmap_dendrograms(self, output_dir, labels=None, n=None, col_cluster=False,
-                                     method='average', metric='correlation', row_cluster=True,
-                                     pseduo_u_pos=None, twoprimeo_pos=None, legend=True):
+                                     method='ward', metric='euclidean', row_cluster=True,
+                                     pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
         """Plot all clustering heatmaps for each experiment and save to directory
+        :param figsize: figure size
         :param legend: boolean option to plot legend
         :param n: number of reads to include in clustering
         :param col_cluster: bool, cluster columns
@@ -889,30 +893,23 @@ class VariantCalls(VariantCall):
         contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
         for label in labels:
             for contig, positions in contig_pos:
-                X = self.get_X(contig, positions, label=label)
+                X = self.get_X(contig, positions, label=label, n=n)
                 figure_path = os.path.join(output_dir, f"{label}_{contig}_{n}_{metric}.png")
-                self._plot_heatmap_dendrogram(X, n=n, col_cluster=col_cluster, figure_path=figure_path,
+                self._plot_heatmap_dendrogram(X, col_cluster=col_cluster, figure_path=figure_path,
                                               method=method, metric=metric, row_cluster=row_cluster,
-                                              pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend)
+                                              pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend,
+                                              figsize=figsize)
 
-    def _plot_heatmap_dendrogram(self, X, n=100, col_cluster=True, figure_path=None,
+    def _plot_heatmap_dendrogram(self, X, col_cluster=True, figure_path=None,
                                  method='average', metric='euclidean', row_cluster=True,
-                                 pseduo_u_pos=None, twoprimeo_pos=None, legend=True):
-        if n is not None:
-            df = []
-            for x in self.experiments:
-                a = X.xs(x, level="label")[:n]
-                a["label"] = x
-                a["read_id"] = a.index
-                df.append(a.set_index(["read_id", "label"]))
-            X = pd.concat(df)
+                                 pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
 
         row_colors = pd.DataFrame(X.index.get_level_values(1))["label"].map(self.color_map)
         data = X.reset_index(drop=True)
 
         g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster,
                            row_cluster=row_cluster,
-                           yticklabels=False, xticklabels=True, cmap="OrRd", figsize=(20, 20))
+                           yticklabels=False, xticklabels=True, cmap="OrRd", figsize=figsize)
 
         if not legend:
             g.cax.set_visible(False)
@@ -931,16 +928,16 @@ class VariantCalls(VariantCall):
             red_patch = mpatches.Patch(color=color, label=experiment)
             experiment_labels.append(red_patch)
 
-        red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
-        blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
+        # red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
+        # blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
 
         if legend:
             first_legend = plt.legend(handles=experiment_labels, bbox_to_anchor=(1.5, 1.2), loc='upper left', ncol=1,
                                       title="Experiments")
             plt.gca().add_artist(first_legend)
 
-            plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left',
-                       title="Modifications")
+            # plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left',
+            #            title="Modifications")
         # h = [plt.plot([],[], color="gray", marker="o", ms=i, ls="")[0] for i in range(5,13)]
         # plt.legend(handles=h, labels=range(5,13),loc=(1.03,0.5), title="Quality")
         labels = [str(int(item.get_text()) + 1) for item in ax.get_xticklabels()]
@@ -951,21 +948,24 @@ class VariantCalls(VariantCall):
             plt.savefig(figure_path, dpi=1000)
         else:
             plt.show()
+        return g
 
     def plot_heatmap_dendrogram(self, contig, positions, label=None, n=100, col_cluster=True,
                                 figure_path=None, method='average', metric='euclidean', row_cluster=True,
-                                pseduo_u_pos=None, twoprimeo_pos=None, legend=True):
-        X = self.get_X(contig, positions, label=label)
+                                pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
+        X = self.get_X(contig, positions, label=label, n=n)
         if pseduo_u_pos is None:
             pseduo_u_pos = self.pseduo_u_pos
         if twoprimeo_pos is None:
             twoprimeo_pos = self.twoprimeo_pos
         # g = sns.heatmap(X[:n], xticklabels=True, yticklabels=False, annot=False, cmap="OrRd")
-        self._plot_heatmap_dendrogram(X, n=n, col_cluster=col_cluster, figure_path=figure_path,
-                                      method=method, metric=metric, row_cluster=row_cluster,
-                                      pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend)
+        g = self._plot_heatmap_dendrogram(X, col_cluster=col_cluster, figure_path=figure_path,
+                                          method=method, metric=metric, row_cluster=row_cluster,
+                                          pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend,
+                                          figsize=figsize)
+        return g
 
-    def get_X(self, contig, positions, label=None):
+    def get_X(self, contig, positions, label=None, n=None):
         data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
         df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
         X = df.dropna()
@@ -974,20 +974,53 @@ class VariantCalls(VariantCall):
             assert label in self.labels, f"Input label [{label}] is not in {self.labels}"
             # X = X.xs(label, level="label")
             X = X.loc[(slice(None), label), :]
+
+        if n is not None:
+            df = []
+            if label is not None:
+                a = X.xs(label, level="label")[:n]
+                a["label"] = label
+                a["read_id"] = a.index
+                df.append(a.set_index(["read_id", "label"]))
+            else:
+                for x in self.experiments:
+                    a = X.xs(x, level="label")[:n]
+                    a["label"] = x
+                    a["read_id"] = a.index
+                    df.append(a.set_index(["read_id", "label"]))
+            X = pd.concat(df)
+
         return X
 
-    def plot_ld_heatmap(self, contig, positions, stat="r2", cmap="OrRd", norm=None, linewidths=0,
-                        figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None):
-        options = ["r2", "D", "D'"]
-        assert stat in options, f"Stat {stat} cannot be found. Must select from: {options}"
-        data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
-        df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
-        X = df.dropna()
-        return self._plot_ld_heatmap(X, stat, cmap, norm, linewidths, figure_path,
-                                     pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, vmax=vmax)
+    def get_contig_percent_mod(self, contig, positions, label=None):
+        X = self.get_X(contig, positions, label=label)
+        return (X >= 0.5).mean()
 
-    def _plot_ld_heatmap(self, X, stat="r2", cmap="OrRd", norm=None, linewidths=0,
-                         figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None):
+
+    def plot_all_plot_ld_heatmap(self, output_dir, n=None, labels=None, stat="pearson", cmap="RdBu", norm=None,
+                                 linewidths=0,
+                                 pseduo_u_pos=None, twoprimeo_pos=None, vmax=None, vmin=None):
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        if labels is None:
+            labels = self.labels
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label, n=n)
+                figure_path = os.path.join(output_dir, f"{label}_{contig}_{n}_{stat}.png")
+                self._plot_ld_heatmap(X, stat=stat, cmap=cmap, norm=norm, linewidths=linewidths,
+                                      figure_path=figure_path, pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos,
+                                      vmax=vmax, vmin=vmin)
+
+    def plot_ld_heatmap(self, contig, positions, stat="pearson", cmap="RdBu", label=None, n=None, norm=None,
+                        linewidths=0,
+                        figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None, vmin=None):
+        X = self.get_X(contig, positions, label=label, n=n)
+        return self._plot_ld_heatmap(X, stat, cmap, norm, linewidths, figure_path,
+                                     pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, vmax=vmax, vmin=vmin)
+
+    def _plot_ld_heatmap(self, X, stat="pearson", cmap="RdBu", norm=None, linewidths=0,
+                         figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None, vmin=None):
         d_stats = self.get_correlation(X, stat)
         # Generate a mask for the upper triangle
         mask = np.triu(np.ones_like(d_stats, dtype=bool))
@@ -999,7 +1032,8 @@ class VariantCalls(VariantCall):
         #         cbar.cmap.set_over('green')
         # Draw the heatmap with the mask and correct aspect ratio
         ax = sns.heatmap(d_stats, mask=mask, cmap=cmap, yticklabels=True, xticklabels=True,
-                         square=True, linewidths=linewidths, cbar_kws={"shrink": .5}, norm=norm, vmax=vmax)  # vmax
+                         square=True, linewidths=linewidths, cbar_kws={"shrink": .5}, norm=norm, vmax=vmax,
+                         vmin=vmin)  # vmax
         if pseduo_u_pos is None:
             pseduo_u_pos = self.pseduo_u_pos
         if twoprimeo_pos is None:
@@ -1044,7 +1078,7 @@ class VariantCalls(VariantCall):
         return self.get_corr(a, b, stat="D'")
 
     @staticmethod
-    def get_corr(a, b, stat="r2"):
+    def get_corr(a, b, stat="pearson"):
         joint_AB = np.mean((a >= 0.5) & (b >= 0.5))
         pA = (a >= 0.5).mean()
         pB = (b >= 0.5).mean()
@@ -1072,14 +1106,19 @@ class VariantCalls(VariantCall):
         elif stat == "r2":
             return coef_of_corr
 
-    def write_correlations(self, output_path, stat="r2", labels=None):
+    def write_correlations(self, output_path, stat="spearman", labels=None):
         """Write out correlations within each experiment to a csv file
 
         :param output_path: path to output file
         :param stat: optional statistic to use
         :param labels: optional labels to use instead of all experiments
         """
-        data = self.get_experiment_correlations(stat=stat, labels=labels)
+        if stat == "spearman" or stat == "spearmanr":
+            data = self.get_experiment_spearman_correlations(labels=labels)
+        else:
+            data = self.get_experiment_correlations(stat=stat, labels=labels)
+        data["ref_index1"] = data["ref_index1"] + 1
+        data["ref_index2"] = data["ref_index2"] + 1
         data.to_csv(output_path, index=False)
         return True
 
@@ -1093,10 +1132,16 @@ class VariantCalls(VariantCall):
         else:
             return stat
 
-    def get_correlation(self, X, stat="r2"):
+    def get_correlation(self, X, stat="pearson"):
         return X.corr(self.get_method(stat))
 
-    def get_experiment_correlations(self, stat="r2", labels=None):
+    def get_spearman_corr(self, X):
+        correlations, pvalues = scipy.stats.spearmanr(X.values)
+        pvalues = pd.DataFrame(pvalues, columns=X.columns, index=X.columns)
+        correlations = pd.DataFrame(correlations, columns=X.columns, index=X.columns)
+        return correlations, pvalues
+
+    def get_experiment_correlations(self, stat="pearson", labels=None):
         """Get correlations of each experiment
 
         :param stat: optional statistic to use
@@ -1121,6 +1166,49 @@ class VariantCalls(VariantCall):
                         df_corr['ref_index1'] == df_corr['ref_index2'])
                 df_corr = df_corr[~mask_dups]
                 df_corr["contig"] = contig
+                if label_df is None:
+                    label_df = df_corr
+                else:
+                    label_df = pd.concat([label_df, df_corr])
+
+            if data is None:
+                data = label_df
+            else:
+                data = pd.merge(data, label_df, how="outer", on=['ref_index1', 'ref_index2', "contig"])
+        return data[order]
+
+    def get_experiment_spearman_correlations(self, labels=None):
+        """Get correlations of each experiment
+
+        :param stat: optional statistic to use
+        :param labels: optional labels to use instead of all experiments
+        """
+        if labels is None:
+            labels = self.labels
+
+        data = None
+        order = ['ref_index1', 'ref_index2', "contig"]
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            order.append(label + "_corr")
+            order.append(label + "_pvalue")
+            label_df = None
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label)
+                correlations, pvalues = self.get_spearman_corr(X)
+                df = correlations.rename_axis(None).rename_axis(None, axis=1)
+                df_corr = df.stack().reset_index()
+                df = pvalues.rename_axis(None).rename_axis(None, axis=1)
+                df_pvalues = df.stack().reset_index()
+                df_pvalues.columns = ['ref_index1', 'ref_index2', label + "_pvalue"]
+                df_corr.columns = ['ref_index1', 'ref_index2', label + "_corr"]
+                mask_dups = (df_corr[['ref_index1', 'ref_index2']].apply(frozenset, axis=1).duplicated()) | (
+                        df_corr['ref_index1'] == df_corr['ref_index2'])
+                df_corr = df_corr[~mask_dups]
+                df_pvalues = df_pvalues[~mask_dups]
+                df_pvalues["contig"] = contig
+                df_corr["contig"] = contig
+                df_corr = pd.merge(df_corr, df_pvalues, how="outer", on=['ref_index1', 'ref_index2', "contig"])
                 if label_df is None:
                     label_df = df_corr
                 else:
