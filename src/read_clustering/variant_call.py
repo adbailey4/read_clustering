@@ -996,10 +996,9 @@ class VariantCalls(VariantCall):
         X = self.get_X(contig, positions, label=label)
         return (X >= 0.5).mean()
 
-
-    def plot_all_plot_ld_heatmap(self, output_dir, n=None, labels=None, stat="pearson", cmap="RdBu", norm=None,
+    def plot_all_plot_ld_heatmap(self, output_dir, n=None, labels=None, stat="spearman", cmap="RdBu", norm=None,
                                  linewidths=0,
-                                 pseduo_u_pos=None, twoprimeo_pos=None, vmax=None, vmin=None):
+                                 pseduo_u_pos=None, twoprimeo_pos=None, vmax=1, vmin=-1):
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         if labels is None:
             labels = self.labels
