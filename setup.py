@@ -7,7 +7,6 @@ from os.path import basename, dirname, join, splitext
 
 from setuptools import find_packages, setup
 
-
 def read(*names, **kwargs):
     with io.open(
             join(dirname(__file__), *names),
@@ -49,14 +48,16 @@ setup(
     keywords=['variant', 'modification'],
     python_requires='>=3.5',
     install_requires=[
-        'pandas>=1.0.5',
+        'pandas>=1.1.0',
         'numpy>=1.14.2',
         'matplotlib>=3.2.2',
         'seaborn>=0.10.1',
-        'scikit-learn>=0.23.1',
+        'scikit-learn>=0.23.1, <0.24.0',
         'hdbscan>=0.8.26',
         'yellowbrick>=1.1',
+        'scipy>=1.5.0',
         'shapely>=1.7.0',
-        'kneed>=0.6.0'],
+        'kneed>=0.6.0',
+        'umap-learn>=0.5.0'],
     setup_requires=['Cython>=0.29.21']
 )

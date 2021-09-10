@@ -1,0 +1,8 @@
+#.gitignore
+.git
+.idea
+build
+dist
+Dockerfile
+.dockerignore
+data

@@ -9,7 +9,7 @@
 
 import unittest
 import os
-from read_clustering.variant_call import VariantCall
+from read_clustering.variant_call import VariantCall, VariantCalls
 import pandas as pd
 from pandas.testing import assert_frame_equal
 import matplotlib.pyplot as plt
@@ -389,8 +389,8 @@ class VariantCallTests(unittest.TestCase):
         positions = [435, 465]
         first_col = ''
         sec_col = ''
-        first_col += 'P' + ' ' + str(positions[0])
-        sec_col += 'P' + ' ' + str(positions[1])
+        first_col += str(positions[0])
+        sec_col += str(positions[1])
 
         temp_df = pd.DataFrame(
             {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
@@ -409,9 +409,9 @@ class VariantCallTests(unittest.TestCase):
         first_col = ''
         sec_col = ''
         third_col = ''
-        first_col += 'P' + ' ' + str(positions[0])
-        sec_col += 'P' + ' ' + str(positions[1])
-        third_col += 'P' + ' ' + str(positions[2])
+        first_col += str(positions[0])
+        sec_col += str(positions[1])
+        third_col += str(positions[2])
 
         temp_df = pd.DataFrame(
             {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
@@ -431,8 +431,8 @@ class VariantCallTests(unittest.TestCase):
         positions = [435, 27]
         first_col = ''
         sec_col = ''
-        first_col += 'P' + ' ' + str(positions[0])
-        sec_col += 'P' + ' ' + str(positions[1])
+        first_col += str(positions[0])
+        sec_col += str(positions[1])
 
         temp_df = pd.DataFrame(
             {'read_id': ['02381d7b-ad58-4d21-8ee3-f77401c13814', '02c6037c-d73b-414d-9090-0bfe88a1e0b0',
@@ -445,6 +445,37 @@ class VariantCallTests(unittest.TestCase):
         pd.testing.assert_frame_equal(temp_df.reset_index(drop=True),
                                       (self.vc.get_reads_covering_positions_data(positions)).reset_index(
                                           drop=True), check_exact=False, check_less_precise=4)
+
+
+class VariantCallsTests(unittest.TestCase):
+    """Test VariantCall class methods"""
+
+    @classmethod
+    def setUpClass(cls):
+        super(VariantCallsTests, cls).setUpClass()
+        cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-2])
+        cls.variant_call_files = [os.path.join(cls.HOME, "tests/test_files/ivt.csv"),
+                                  os.path.join(cls.HOME, "tests/test_files/native_cbf5_gal.csv")]
+        cls.variant_call_file_names = ["ivt", "native"]
+        cls.vc = VariantCalls(cls.variant_call_files, cls.variant_call_file_names)
+
+    def test_get_position_correlations(self):
+        contig = "RDN18-1"
+        X = self.vc.get_X(contig, self.vc.get_contig_positions(contig))
+        correlations = self.vc.get_correlation(X)
+        self.assertAlmostEqual(correlations.loc[27, 27], 1)
+
+    def test_get_X(self):
+        contig = "RDN18-1"
+        X = self.vc.get_X(contig, self.vc.get_contig_positions(contig), label="native")
+        X2 = self.vc.get_X(contig, self.vc.get_contig_positions(contig), label="ivt")
+        self.assertEqual(len(set(X.index.values).intersection(set(X2.index.values))), 0)
+
+    def test_write_correlations(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake_file.csv")
+            self.vc.write_correlations(fake_file)
+            self.assertTrue(os.path.exists(fake_file))
 
 
 if __name__ == '__main__':

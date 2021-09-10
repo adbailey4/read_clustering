@@ -10,9 +10,14 @@
 
 import math
 import os
+import re
 
+import scipy.stats
+import umap
 import hdbscan
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -21,8 +26,9 @@ from scipy.sparse import csgraph
 from scipy.sparse.linalg import eigsh
 from scipy.spatial.distance import pdist, squareform
 from scipy.cluster import hierarchy
-from sklearn.neighbors import NearestNeighbors
+from sklearn.neighbors import NearestNeighbors, KernelDensity
 from sklearn.manifold import TSNE
+from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture as GMM
@@ -31,8 +37,10 @@ from sklearn.cluster import AffinityPropagation, AgglomerativeClustering, DBSCAN
 from yellowbrick.cluster import KElbowVisualizer
 from sklearn import metrics
 from kneed import KneeLocator
+from pathlib import Path
 
-sns.set()
+
+# sns.set()
 
 
 class VariantCall(object):
@@ -45,6 +53,13 @@ class VariantCall(object):
         """
         self.data = pd.read_csv(file_path)
         self.canonical = {"A", "C", "G", "T"}
+
+    @staticmethod
+    def load_variant_data(variant_csv_path, label):
+        assert os.path.exists(variant_csv_path), f"variant_csv_path does not exist: {variant_csv_path}"
+        variant_data = pd.read_csv(variant_csv_path)
+        variant_data["label"] = label
+        return variant_data
 
     def get_read_ids(self):
         """Return the set of read ids """
@@ -336,8 +351,7 @@ class VariantCall(object):
         df_plot = pd.DataFrame(list(zip(target_ids)))
         df_plot.columns = ['read_id']
         for key in d:
-            col_val = ''
-            col_val += 'P' + ' ' + str(key)
+            col_val = str(key)
             df_plot[col_val] = d[key]
         if plot:
             del df_plot['read_id']
@@ -400,6 +414,7 @@ class VariantCall(object):
             bandwidth = estimate_bandwidth(X, quantile=quantile_val)
         else:
             bandwidth = 0.5
+        print(f"Bandwith selected: {bandwidth}")
         ms = MeanShift(bandwidth=bandwidth)
         mf = ms.fit(X)
         print('Number of clusters found: ', len(mf.cluster_centers_))
@@ -587,6 +602,28 @@ class VariantCall(object):
             plt.show()
         return figure_path
 
+    def plot_UMAP_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None, W=None,
+                                                **other_params):
+        # **other_params can be : n_clusters=,affinity=, max_number_clusters=, cluster_size=,eps=, min_samples=,
+        # n_components=, find_optimal=,  according to what each clustering method requires
+        X = self.get_reads_covering_positions_data(positions, plot=True)
+        if W is not None:
+            X = np.multiply(X, W)
+        reducer = umap.UMAP()
+        umap_results = reducer.fit_transform(X)
+        method_to_call = getattr(self, clustering_algorithm)
+        fit, predictor = method_to_call(positions, **other_params)
+        plt.scatter(umap_results[:, 0], umap_results[:, 1], c=predictor, s=30, cmap='rainbow')
+        plt.xlabel("UMAP 1")
+        plt.ylabel("UMAP 2")
+        plt.title(str(len(positions)) + ' ' + 'positions' + ' ' + clustering_algorithm)
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path)
+        else:
+            plt.show()
+        return figure_path
+
     def plot_PCA_reads_covering_positions_data(self, positions, clustering_algorithm, figure_path=None, **other_params):
         X = self.get_reads_covering_positions_data(positions, plot=True)
         scaler = StandardScaler()
@@ -641,3 +678,580 @@ class VariantCall(object):
         else:
             plt.show()
         return figure_path, number
+
+    def clusters_for_position_pdf(self, positions, pos_to_evaluate, max_number_clusters, find_optimal=False,
+                                  cluster_count=False):
+        """Plot the PDF for the reads in the clusters of each positions given 
+        :param positions: complete list of the reference_index of the subunit 
+        :param pos_to_evaluate: list of reference_index to obtain their density plots
+        :param max_number_clusters: maximum number of clusters to be considered by the "elbow method", or 
+         clusters to be found by kmeans if find_optimal = False.
+        :param find_optimal: if True runs "elbow method" automatically to find optimal number of clusters to be
+        found by kmeans
+        :param cluster_count: verbose option
+        :return Density plot of the number of reads (y axis) and variant probability (x axis) for the clusters in 
+        each pos_to-evaluate
+        """
+        fit, predict = self.k_means(positions, max_number_clusters=max_number_clusters, find_optimal=find_optimal)
+        indexes = {i: np.where(fit.labels_ == i)[0] for i in range(fit.n_clusters)}
+        X = self.get_reads_covering_positions_data(positions, plot=True)
+        possible_colors = ['blue', 'red', 'green', 'orange', 'purple', 'black', 'magenta', 'cyan', 'brown', 'gray']
+        for pos in pos_to_evaluate:
+            for key, value in indexes.items():
+                if cluster_count:
+                    print(str(key) + ' data point count: ', len(value))
+                X_new = X.iloc[value.tolist()]
+                X_pos = X_new.loc[:, str(pos)].T
+                grid = GridSearchCV(KernelDensity(), {'bandwidth': np.linspace(0.1, 1.0, 30)}, cv=20)
+                grid.fit(X_pos[:, None])
+                bw = grid.best_params_
+                kde_skl = KernelDensity(bandwidth=bw['bandwidth'])
+                kde_skl.fit(X_pos[:, None])
+                x_grid = np.linspace(-.3, 1.3, 1000)
+                log_pdf = kde_skl.score_samples(x_grid[:, np.newaxis])
+                plt.plot(x_grid, np.exp(log_pdf), color=possible_colors[key], alpha=0.5, lw=1.5, label=str(key))
+
+            plt.legend(title='Cluster (kmeans)')
+            plt.title('Position ' + str(pos) + ' density plot')
+            plt.xlabel('Variant probability')
+            plt.ylabel('Density (reads)')
+            plt.show()
+        return
+
+    def kmeans_clusters_for_position_KS_test(self, positions, pos_to_evaluate, max_number_clusters, find_optimal=False):
+        """Pairwise KS test comparing the clusters found by kmeans on a specific position to determine if they 
+        are significantly different  
+        :param positions: complete list of the reference_index of the subunit to be evaluated
+        :param pos_to_evaluate: reference_index whose distribution across the clusters will be compared 
+        :param max_number_clusters: maximum number of clusters to be considered by the "elbow method", or 
+         clusters to be found by kmeans if find_optimal = False.
+        :param find_optimal: if True runs "elbow method" automatically to find optimal number of clusters to be
+        found by kmeans
+        :return ks_df: dataframe with the p value resulting from the pairwise KS test between cluster pairs
+        :return min_p_val: minimum p value found in ks_df
+        """
+        fit, predict = self.k_means(positions, max_number_clusters=max_number_clusters, find_optimal=find_optimal)
+        indexes = {i: np.where(fit.labels_ == i)[0] for i in range(fit.n_clusters)}
+        X = self.get_reads_covering_positions_data(positions, plot=True)
+        ks_compare = []
+        d = {}
+        critical_p = 1.36 / np.sqrt(len(X.index))
+        for key, value in indexes.items():
+            X_new = X.iloc[value.tolist()]
+            X_pos = X_new.loc[:, pos_to_evaluate].T
+            grid = GridSearchCV(KernelDensity(), {'bandwidth': np.linspace(0.1, 1.0, 30)}, cv=20)
+            grid.fit(X_pos[:, None])
+            bw = grid.best_params_
+            kde_skl = KernelDensity(bandwidth=bw['bandwidth'])
+            kde_skl.fit(X_pos[:, None])
+            x_grid = np.linspace(-.3, 1.3, 1000)
+            ks_compare.append(kde_skl.score_samples(x_grid[:, np.newaxis]))
+            d[str(kde_skl.score_samples(x_grid[:, np.newaxis]))] = key
+
+        ks_df = pd.DataFrame([], columns=list(range(0, len(d))), index=list(range(0, len(d))))
+        min_p_val = (ks_df.min()).min()
+        return ks_df, min_p_val
+
+    def positions_modification_plot_kmeans_clusters(self, positions, max_number_clusters, find_optimal=False,
+                                                    cluster_count=False, subunit_name='', threshold=0.5,
+                                                    pseudou="ql", twoprimeo=["na", "ob", "pc", "qd"]):
+        fit, predict = self.k_means(positions, max_number_clusters=max_number_clusters, find_optimal=find_optimal)
+        indexes = {i: np.where(fit.labels_ == i)[0] for i in range(fit.n_clusters)}
+        X = self.get_reads_covering_positions_data(positions, plot=True)
+        color_df = pd.DataFrame([], index=list(range(0, len(indexes))), columns=positions)
+        # str_pos = [str(x) for x in positions]
+        # mod_df = pd.DataFrame([], index=list(range(0, len(indexes))), columns=str_pos)
+        for key, value in indexes.items():
+            if cluster_count:
+                print('Data points in cluster' + str(key) + ' : ', len(value))
+            X_cluster = X.iloc[value.tolist()]
+            for pos in positions:
+                X_pos = X_cluster.loc[:, str(pos)]
+                X_modified = X_pos[X_pos > threshold]
+                color_df.at[[key], [pos]] = (len(X_modified) / len(X_pos)) * 100
+
+        plt.figure(figsize=(18, 5))
+        ax = sns.heatmap(color_df.astype(float), xticklabels=True, annot=False, vmin=0, vmax=100, cmap="OrRd")
+        ax.hlines(list(range(0, len(indexes))), *ax.get_xlim(), linewidth=5, color='white')
+        ax.set_title('Modification occurrence in ' + subunit_name + ' positions', fontsize=18)
+        ax.set_xlabel("Positions (5' to 3')", fontsize=15)
+        ax.set_ylabel('Cluster (kmeans)', fontsize=15)
+        pseduo_u_df = self.get_positions_of_variant_set(pseudou)
+        twoprimeo_df = self.get_positions_of_variant_sets(twoprimeo)
+        pseduo_u_pos = pseduo_u_df[pseduo_u_df["contig"] == subunit_name]["reference_index"].values
+        twoprimeo_pos = twoprimeo_df[twoprimeo_df["contig"] == subunit_name]["reference_index"].values
+        [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in twoprimeo_pos]
+        return plt.show()
+
+
+class VariantCalls(VariantCall):
+    """Read in variant call file and give access points to various types of data"""
+
+    def __init__(self, file_paths, labels, color_map="tab20"):
+        super().__init__(file_paths[0])
+        data = []
+        self.labels = labels
+        self.file_paths = file_paths
+        for path, label in zip(file_paths, labels):
+            data.append(self.load_variant_data(path, label))
+        self.data = pd.concat(data, ignore_index=True)
+        self.experiments = sorted(labels)
+        self.color_map = dict(zip(self.experiments, sns.color_palette(color_map)))
+        self.pseduo_u_pos = [775, 959, 965, 985, 989, 1003, 1041, 1051, 1055, 1109, 1123,
+                             2128, 2132, 2190, 2257, 2259, 2263, 2265, 2313, 2339, 2348, 2350,
+                             2415, 2734, 2825, 2864, 2879, 2922, 2943, 2974, 105, 119, 210, 301, 465, 631, 758, 765,
+                             998, 1180, 1186,
+                             1289, 1414]
+        self.twoprimeo_pos = [648, 649, 662, 804, 806, 816, 866, 875, 897, 907, 1132,
+                              1436, 1448, 1449, 1887, 2196, 2219, 2255, 2279, 2280, 2287, 2336,
+                              2346, 2416, 2420, 2618, 2639, 2723, 2728, 2790, 2792, 2814, 2920,
+                              2921, 2945, 2947, 2958, 27, 99, 413, 419, 435, 540, 561, 577, 618, 795, 973,
+                              1006, 1125, 1268, 1270, 1427, 1571, 1638]
+
+    def plot_UMAP_by_label(self, contig, positions, figure_path=None, n_components=2, n=None, legend=True,
+                           **other_params):
+        data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
+        df = data.pivot(index=['label', 'read_id'], columns=['reference_index'], values='prob2')
+        X = df.dropna()
+        if n is not None:
+            df = []
+            for x in self.experiments:
+                a = X.loc[x][:n]
+                a["label"] = x
+                a["read_id"] = a.index
+                df.append(a.set_index(["label", "read_id"]))
+            X = pd.concat(df)
+
+        reducer = umap.UMAP(n_components=n_components)
+        umap_results = reducer.fit_transform(X)
+        X["umap_result_x"] = umap_results[:, 0]
+        X["umap_result_y"] = umap_results[:, 1]
+        #         predictor = hdbscan.HDBSCAN(min_cluster_size=cluster_size, gen_min_span_tree=True).fit_predict(X)
+        #         X["predictor"] = predictor
+        markers = mpl.markers.MarkerStyle.markers.keys()
+        marker = 'o'
+        #         colors = ('g', 'r', 'c', 'm', 'y', 'k', 'w', 'b')
+
+        fig = plt.figure(figsize=(15, 15))
+        if n_components == 2:
+            ax = fig.add_subplot(111)
+        if n_components == 3:
+            ax = fig.add_subplot(111, projection='3d')
+            X["umap_result_z"] = umap_results[:, 2]
+        ax.set_facecolor("white")
+
+        # for item in [fig, ax]:
+        #     item.patch.set_visible(False)
+
+        for experiment in self.experiments:
+            plot_data = X.xs(experiment, level="label")
+            #     plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=30, c=plot_data["predictor"].values, cmap='rainbow')
+            if n_components == 3:
+                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values,
+                           plot_data["umap_result_z"].values, color=self.color_map[experiment], marker=marker,
+                           label=experiment, **other_params)
+            else:
+                ax.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values,
+                           color=self.color_map[experiment], marker=marker, label=experiment, **other_params)
+
+                #             plt.scatter(plot_data["umap_result_x"].values, plot_data["umap_result_y"].values, marker=marker, s=3, c=color, cmap='rainbow', label=experiment)
+
+        ax.set_xlabel("UMAP 1")
+        ax.set_ylabel("UMAP 2")
+        if n_components == 3:
+            ax.set_zlabel("UMAP 3")
+        if legend:
+            plt.legend()
+
+        plt.title(f"{contig}: {str(len(positions))} positions")
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path, dpi=1000)
+        else:
+            plt.show()
+
+    def plot_all_heatmap_dendrograms(self, output_dir, labels=None, n=None, col_cluster=False,
+                                     method='ward', metric='euclidean', row_cluster=True,
+                                     pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
+        """Plot all clustering heatmaps for each experiment and save to directory
+        :param figsize: figure size
+        :param legend: boolean option to plot legend
+        :param n: number of reads to include in clustering
+        :param col_cluster: bool, cluster columns
+        :param method: clustering method
+        :param metric: clustering metric
+        :param row_cluster: boolean option to cluster rows
+        :param twoprimeo_pos: optional list of twoprimeo positions
+        :param pseduo_u_pos: optional list of pseudoU positions
+        :param output_dir: output directory
+        :param labels: list of labels to cluster and plot
+        """
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        if labels is None:
+            labels = self.labels
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label, n=n)
+                figure_path = os.path.join(output_dir, f"{label}_{contig}_{n}_{metric}.png")
+                self._plot_heatmap_dendrogram(X, col_cluster=col_cluster, figure_path=figure_path,
+                                              method=method, metric=metric, row_cluster=row_cluster,
+                                              pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend,
+                                              figsize=figsize)
+
+    def _plot_heatmap_dendrogram(self, X, col_cluster=True, figure_path=None,
+                                 method='average', metric='euclidean', row_cluster=True,
+                                 pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
+
+        row_colors = pd.DataFrame(X.index.get_level_values(1))["label"].map(self.color_map)
+        data = X.reset_index(drop=True)
+
+        g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster,
+                           row_cluster=row_cluster,
+                           yticklabels=False, xticklabels=True, cmap="OrRd", figsize=figsize)
+
+        if not legend:
+            g.cax.set_visible(False)
+        ax = g.ax_heatmap
+
+        if pseduo_u_pos is None:
+            pseduo_u_pos = self.pseduo_u_pos
+        if twoprimeo_pos is None:
+            twoprimeo_pos = self.twoprimeo_pos
+
+        [t.set_color('red') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if int(t.get_text()) in twoprimeo_pos]
+
+        experiment_labels = []
+        for experiment, color in self.color_map.items():
+            red_patch = mpatches.Patch(color=color, label=experiment)
+            experiment_labels.append(red_patch)
+
+        # red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
+        # blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
+
+        if legend:
+            first_legend = plt.legend(handles=experiment_labels, bbox_to_anchor=(1.5, 1.2), loc='upper left', ncol=1,
+                                      title="Experiments")
+            plt.gca().add_artist(first_legend)
+
+            # plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(1.5, .5), loc='upper left',
+            #            title="Modifications")
+        # h = [plt.plot([],[], color="gray", marker="o", ms=i, ls="")[0] for i in range(5,13)]
+        # plt.legend(handles=h, labels=range(5,13),loc=(1.03,0.5), title="Quality")
+        labels = [str(int(item.get_text()) + 1) for item in ax.get_xticklabels()]
+        ax.set_xticklabels(labels)
+
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path, dpi=1000)
+        else:
+            plt.show()
+        return g
+
+    def plot_heatmap_dendrogram(self, contig, positions, label=None, n=100, col_cluster=True,
+                                figure_path=None, method='average', metric='euclidean', row_cluster=True,
+                                pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
+        X = self.get_X(contig, positions, label=label, n=n)
+        if pseduo_u_pos is None:
+            pseduo_u_pos = self.pseduo_u_pos
+        if twoprimeo_pos is None:
+            twoprimeo_pos = self.twoprimeo_pos
+        # g = sns.heatmap(X[:n], xticklabels=True, yticklabels=False, annot=False, cmap="OrRd")
+        g = self._plot_heatmap_dendrogram(X, col_cluster=col_cluster, figure_path=figure_path,
+                                          method=method, metric=metric, row_cluster=row_cluster,
+                                          pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend,
+                                          figsize=figsize)
+        return g
+
+    def get_X(self, contig, positions, label=None, n=None):
+        data = self.data[(self.data["contig"] == contig) & (self.data['reference_index'].isin(positions))]
+        df = data.pivot(index=['read_id', 'label'], columns=['reference_index'], values='prob2')
+        X = df.dropna()
+        X = X.sort_index()
+        if label is not None:
+            assert label in self.labels, f"Input label [{label}] is not in {self.labels}"
+            # X = X.xs(label, level="label")
+            X = X.loc[(slice(None), label), :]
+
+        if n is not None:
+            df = []
+            if label is not None:
+                a = X.xs(label, level="label")[:n]
+                a["label"] = label
+                a["read_id"] = a.index
+                df.append(a.set_index(["read_id", "label"]))
+            else:
+                for x in self.experiments:
+                    a = X.xs(x, level="label")[:n]
+                    a["label"] = x
+                    a["read_id"] = a.index
+                    df.append(a.set_index(["read_id", "label"]))
+            X = pd.concat(df)
+
+        return X
+
+    def get_contig_percent_mod(self, contig, positions, label=None):
+        X = self.get_X(contig, positions, label=label)
+        return (X >= 0.5).mean()
+
+    def plot_all_plot_ld_heatmap(self, output_dir, n=None, labels=None, stat="spearman", cmap="RdBu", norm=None,
+                                 linewidths=0,
+                                 pseduo_u_pos=None, twoprimeo_pos=None, vmax=1, vmin=-1):
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        if labels is None:
+            labels = self.labels
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label, n=n)
+                figure_path = os.path.join(output_dir, f"{label}_{contig}_{n}_{stat}.png")
+                self._plot_ld_heatmap(X, stat=stat, cmap=cmap, norm=norm, linewidths=linewidths,
+                                      figure_path=figure_path, pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos,
+                                      vmax=vmax, vmin=vmin)
+
+    def plot_ld_heatmap(self, contig, positions, stat="pearson", cmap="RdBu", label=None, n=None, norm=None,
+                        linewidths=0,
+                        figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None, vmin=None):
+        X = self.get_X(contig, positions, label=label, n=n)
+        return self._plot_ld_heatmap(X, stat, cmap, norm, linewidths, figure_path,
+                                     pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, vmax=vmax, vmin=vmin)
+
+    def _plot_ld_heatmap(self, X, stat="pearson", cmap="RdBu", norm=None, linewidths=0,
+                         figure_path=None, pseduo_u_pos=None, twoprimeo_pos=None, vmax=None, vmin=None):
+        d_stats = self.get_correlation(X, stat)
+        # Generate a mask for the upper triangle
+        mask = np.triu(np.ones_like(d_stats, dtype=bool))
+        # Set up the matplotlib figure
+        f, ax = plt.subplots(figsize=(16, 14))
+        # Generate a custom diverging colormap
+        #         im = ax.imshow(data, cmap=plt.cm.hot, interpolation='none', vmax=threshold)
+        #         cbar = fig.colorbar(im, extend='max')
+        #         cbar.cmap.set_over('green')
+        # Draw the heatmap with the mask and correct aspect ratio
+        ax = sns.heatmap(d_stats, mask=mask, cmap=cmap, yticklabels=True, xticklabels=True,
+                         square=True, linewidths=linewidths, cbar_kws={"shrink": .5}, norm=norm, vmax=vmax,
+                         vmin=vmin)  # vmax
+        if pseduo_u_pos is None:
+            pseduo_u_pos = self.pseduo_u_pos
+        if twoprimeo_pos is None:
+            twoprimeo_pos = self.twoprimeo_pos
+        [t.set_color('red') for t in ax.xaxis.get_ticklabels() if
+         int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.xaxis.get_ticklabels() if
+         int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
+        [t.set_color('red') for t in ax.yaxis.get_ticklabels() if
+         int(re.search(r'\d+', t.get_text()).group()) in pseduo_u_pos]
+        [t.set_color('blue') for t in ax.yaxis.get_ticklabels() if
+         int(re.search(r'\d+', t.get_text()).group()) in twoprimeo_pos]
+        ax.set_xticks(ax.get_yticks())
+        ax.set_xticklabels([int(x.get_text()) + 1 for x in ax.get_yticklabels()])
+        ax.set_yticks(ax.get_xticks())
+        ax.set_yticklabels(ax.get_xticklabels())
+
+        #         experiment_labels = []
+        #         for experiment, color in self.color_map.items():
+        #             red_patch = mpatches.Patch(color=color, label=experiment)
+        #             experiment_labels.append(red_patch)
+
+        red_pseudoU = mpatches.Patch(color="red", label="Pseudouridine")
+        blue_twoprime = mpatches.Patch(color="blue", label="2'O methylcytosine")
+        plt.legend(handles=[red_pseudoU, blue_twoprime], bbox_to_anchor=(0, 1), loc='lower right',
+                   title="Modifications")
+        if figure_path is not None:
+            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+            plt.savefig(figure_path, dpi=1000)
+        else:
+            plt.show()
+
+        return d_stats
+
+    def get_r2(self, a, b):
+        return self.get_corr(a, b, stat="r2")
+
+    def get_d(self, a, b):
+        return self.get_corr(a, b, stat="D")
+
+    def get_d_prime(self, a, b):
+        return self.get_corr(a, b, stat="D'")
+
+    @staticmethod
+    def get_corr(a, b, stat="pearson"):
+        joint_AB = np.mean((a >= 0.5) & (b >= 0.5))
+        pA = (a >= 0.5).mean()
+        pB = (b >= 0.5).mean()
+        pa = (a < 0.5).mean()
+        pb = (b < 0.5).mean()
+        D = joint_AB - (pA * pB)
+        if D > 0:
+            Dmax = min([pa * pB, pA * pb])
+        if D < 0:
+            Dmax = min([pA * pB, pa * pb]) * -1
+        if D == 0:
+            D_prime = 0
+        else:
+            D_prime = D / Dmax
+        denom = (pA * pB * pa * pb)
+        if denom == 0:
+            coef_of_corr = 0
+        else:
+            coef_of_corr = (D ** 2) / (pA * pB * pa * pb)
+
+        if stat == "D":
+            return D
+        elif stat == "D'":
+            return D_prime
+        elif stat == "r2":
+            return coef_of_corr
+
+    def write_correlations(self, output_path, stat="spearman", labels=None):
+        """Write out correlations within each experiment to a csv file
+
+        :param output_path: path to output file
+        :param stat: optional statistic to use
+        :param labels: optional labels to use instead of all experiments
+        """
+        if stat == "spearman" or stat == "spearmanr":
+            data = self.get_experiment_spearman_correlations(labels=labels)
+        else:
+            data = self.get_experiment_correlations(stat=stat, labels=labels)
+        data["ref_index1"] = data["ref_index1"] + 1
+        data["ref_index2"] = data["ref_index2"] + 1
+        data.to_csv(output_path, index=False)
+        return True
+
+    def get_method(self, stat):
+        if stat == "r2":
+            return self.get_r2
+        if stat == "D":
+            return self.get_d
+        if stat == "D'":
+            return self.get_d_prime
+        else:
+            return stat
+
+    def get_correlation(self, X, stat="pearson"):
+        return X.corr(self.get_method(stat))
+
+    def get_spearman_corr(self, X):
+        correlations, pvalues = scipy.stats.spearmanr(X.values)
+        pvalues = pd.DataFrame(pvalues, columns=X.columns, index=X.columns)
+        correlations = pd.DataFrame(correlations, columns=X.columns, index=X.columns)
+        return correlations, pvalues
+
+    def get_experiment_correlations(self, stat="pearson", labels=None):
+        """Get correlations of each experiment
+
+        :param stat: optional statistic to use
+        :param labels: optional labels to use instead of all experiments
+        """
+        if labels is None:
+            labels = self.labels
+
+        data = None
+        order = ['ref_index1', 'ref_index2', "contig"]
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            order.append(label)
+            label_df = None
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label)
+                correlations = self.get_correlation(X, stat)
+                df = correlations.rename_axis(None).rename_axis(None, axis=1)
+                df_corr = df.stack().reset_index()
+                df_corr.columns = ['ref_index1', 'ref_index2', label]
+                mask_dups = (df_corr[['ref_index1', 'ref_index2']].apply(frozenset, axis=1).duplicated()) | (
+                        df_corr['ref_index1'] == df_corr['ref_index2'])
+                df_corr = df_corr[~mask_dups]
+                df_corr["contig"] = contig
+                if label_df is None:
+                    label_df = df_corr
+                else:
+                    label_df = pd.concat([label_df, df_corr])
+
+            if data is None:
+                data = label_df
+            else:
+                data = pd.merge(data, label_df, how="outer", on=['ref_index1', 'ref_index2', "contig"])
+        return data[order]
+
+    def get_experiment_spearman_correlations(self, labels=None):
+        """Get correlations of each experiment
+
+        :param stat: optional statistic to use
+        :param labels: optional labels to use instead of all experiments
+        """
+        if labels is None:
+            labels = self.labels
+
+        data = None
+        order = ['ref_index1', 'ref_index2', "contig"]
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            order.append(label + "_corr")
+            order.append(label + "_pvalue")
+            label_df = None
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label)
+                correlations, pvalues = self.get_spearman_corr(X)
+                df = correlations.rename_axis(None).rename_axis(None, axis=1)
+                df_corr = df.stack().reset_index()
+                df = pvalues.rename_axis(None).rename_axis(None, axis=1)
+                df_pvalues = df.stack().reset_index()
+                df_pvalues.columns = ['ref_index1', 'ref_index2', label + "_pvalue"]
+                df_corr.columns = ['ref_index1', 'ref_index2', label + "_corr"]
+                mask_dups = (df_corr[['ref_index1', 'ref_index2']].apply(frozenset, axis=1).duplicated()) | (
+                        df_corr['ref_index1'] == df_corr['ref_index2'])
+                df_corr = df_corr[~mask_dups]
+                df_pvalues = df_pvalues[~mask_dups]
+                df_pvalues["contig"] = contig
+                df_corr["contig"] = contig
+                df_corr = pd.merge(df_corr, df_pvalues, how="outer", on=['ref_index1', 'ref_index2', "contig"])
+                if label_df is None:
+                    label_df = df_corr
+                else:
+                    label_df = pd.concat([label_df, df_corr])
+
+            if data is None:
+                data = label_df
+            else:
+                data = pd.merge(data, label_df, how="outer", on=['ref_index1', 'ref_index2', "contig"])
+        return data[order]
+
+    def get_experiment_percent_modified(self, labels=None):
+        """Get percent modified of each position for each experiment
+
+        :param labels: optional labels to use instead of all experiments
+        """
+        order = ["contig"]
+        if labels is None:
+            labels = self.labels
+        data = None
+        contig_pos = [[contig, self.get_contig_positions(contig)] for contig in set(self.data["contig"])]
+        for label in labels:
+            order.append(label)
+            label_df = None
+            for contig, positions in contig_pos:
+                X = self.get_X(contig, positions, label=label)
+                probs = pd.DataFrame((X >= 0.5).mean()).rename(columns={0: label})
+                probs["contig"] = contig
+                if label_df is None:
+                    label_df = probs
+                else:
+                    label_df = pd.concat([label_df, probs])
+            if data is None:
+                data = label_df
+            else:
+                data = pd.merge(data, label_df, how="outer", on=["reference_index", "contig"])
+        data = data[order]
+        return data
+
+    def write_experiment_percent_modified(self, output_path, labels=None):
+        """Write percent modified of each position for each experiment
+
+        :param output_path: path to output file
+        :param labels: optional labels to use instead of all experiments
+        """
+        self.get_experiment_percent_modified(labels=labels).to_csv(output_path)
+        return True
