@@ -1135,7 +1135,10 @@ class VariantCalls(VariantCall):
         return X.corr(self.get_method(stat))
 
     def get_spearman_corr(self, X):
-        correlations, pvalues = scipy.stats.spearmanr(X.values)
+        values = X.values
+        if 1 in X.mean().values:
+            values[0] = values[0] * 0.999999
+        correlations, pvalues = scipy.stats.spearmanr(values)
         pvalues = pd.DataFrame(pvalues, columns=X.columns, index=X.columns)
         correlations = pd.DataFrame(correlations, columns=X.columns, index=X.columns)
         return correlations, pvalues
