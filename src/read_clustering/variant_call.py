@@ -797,7 +797,11 @@ class VariantCalls(VariantCall):
             data.append(self.load_variant_data(path, label))
         self.data = pd.concat(data, ignore_index=True)
         self.experiments = sorted(labels)
-        self.color_map = dict(zip(self.experiments, sns.color_palette(color_map)))
+        if isinstance(color_map, list):
+            assert len(color_map) >= len(self.experiments), "Need more colors in color map"
+            self.color_map = dict(zip(self.experiments, color_map))
+        else:
+            self.color_map = dict(zip(self.experiments, sns.color_palette(color_map)))
         self.pseduo_u_pos = [775, 959, 965, 985, 989, 1003, 1041, 1051, 1055, 1109, 1123,
                              2128, 2132, 2190, 2257, 2259, 2263, 2265, 2313, 2339, 2348, 2350,
                              2415, 2734, 2825, 2864, 2879, 2922, 2943, 2974, 105, 119, 210, 301, 465, 631, 758, 765,
@@ -866,14 +870,14 @@ class VariantCalls(VariantCall):
 
         plt.title(f"{contig}: {str(len(positions))} positions")
         if figure_path is not None:
-            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
             plt.savefig(figure_path, dpi=1000)
         else:
             plt.show()
 
     def plot_all_heatmap_dendrograms(self, output_dir, labels=None, n=None, col_cluster=False,
                                      method='ward', metric='euclidean', row_cluster=True,
-                                     pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
+                                     pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20),
+                                     cmap="OrRd", force=True):
         """Plot all clustering heatmaps for each experiment and save to directory
         :param figsize: figure size
         :param legend: boolean option to plot legend
@@ -898,18 +902,19 @@ class VariantCalls(VariantCall):
                 self._plot_heatmap_dendrogram(X, col_cluster=col_cluster, figure_path=figure_path,
                                               method=method, metric=metric, row_cluster=row_cluster,
                                               pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend,
-                                              figsize=figsize)
+                                              figsize=figsize, cmap=cmap, force=force)
 
     def _plot_heatmap_dendrogram(self, X, col_cluster=True, figure_path=None,
                                  method='average', metric='euclidean', row_cluster=True,
-                                 pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
+                                 pseduo_u_pos=None, twoprimeo_pos=None, legend=True,
+                                 figsize=(20, 20), cmap="OrRd", force=True):
 
         row_colors = pd.DataFrame(X.index.get_level_values(1))["label"].map(self.color_map)
         data = X.reset_index(drop=True)
 
         g = sns.clustermap(data, method=method, metric=metric, row_colors=row_colors, col_cluster=col_cluster,
                            row_cluster=row_cluster,
-                           yticklabels=False, xticklabels=True, cmap="OrRd", figsize=figsize)
+                           yticklabels=False, xticklabels=True, cmap=cmap, figsize=figsize)
 
         if not legend:
             g.cax.set_visible(False)
@@ -943,8 +948,7 @@ class VariantCalls(VariantCall):
         labels = [str(int(item.get_text()) + 1) for item in ax.get_xticklabels()]
         ax.set_xticklabels(labels)
 
-        if figure_path is not None:
-            assert not os.path.exists(figure_path), "Save fig path does exist: {}".format(figure_path)
+        if figure_path is not None and force:
             plt.savefig(figure_path, dpi=1000)
         else:
             plt.show()
@@ -952,7 +956,7 @@ class VariantCalls(VariantCall):
 
     def plot_heatmap_dendrogram(self, contig, positions, label=None, n=100, col_cluster=True,
                                 figure_path=None, method='average', metric='euclidean', row_cluster=True,
-                                pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20)):
+                                pseduo_u_pos=None, twoprimeo_pos=None, legend=True, figsize=(20, 20), cmap="OrRd"):
         X = self.get_X(contig, positions, label=label, n=n)
         if pseduo_u_pos is None:
             pseduo_u_pos = self.pseduo_u_pos
@@ -962,7 +966,7 @@ class VariantCalls(VariantCall):
         g = self._plot_heatmap_dendrogram(X, col_cluster=col_cluster, figure_path=figure_path,
                                           method=method, metric=metric, row_cluster=row_cluster,
                                           pseduo_u_pos=pseduo_u_pos, twoprimeo_pos=twoprimeo_pos, legend=legend,
-                                          figsize=figsize)
+                                          figsize=figsize, cmap=cmap)
         return g
 
     def get_X(self, contig, positions, label=None, n=None):
@@ -1136,8 +1140,9 @@ class VariantCalls(VariantCall):
 
     def get_spearman_corr(self, X):
         values = X.values
-        if 1 in X.mean().values:
-            values[0] = values[0] * 0.999999
+        change = bool(np.sum(X.std() == 0))
+        if change:
+            values[0] = values[0] * 0.99999
         correlations, pvalues = scipy.stats.spearmanr(values)
         pvalues = pd.DataFrame(pvalues, columns=X.columns, index=X.columns)
         correlations = pd.DataFrame(correlations, columns=X.columns, index=X.columns)
